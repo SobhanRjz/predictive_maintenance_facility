@@ -1,0 +1,77 @@
+"""Main orchestrator for preprocessing pipeline."""
+import pandas as pd
+from pathlib import Path
+from src.core.interfaces import IDataFilter, IDataSplitter, IDataExporter
+from src.loaders.data_loader import MultiFileLoader
+from src.validators.data_validator import DataValidator
+
+
+class PreprocessingOrchestrator:
+    """Orchestrates the complete preprocessing workflow."""
+    
+    def __init__(
+        self,
+        loader: MultiFileLoader,
+        normal_filter: IDataFilter,
+        abnormal_filter: IDataFilter,
+        splitter: IDataSplitter,
+        exporter: IDataExporter,
+        validator: DataValidator
+    ):
+        self._loader = loader
+        self._normal_filter = normal_filter
+        self._abnormal_filter = abnormal_filter
+        self._splitter = splitter
+        self._exporter = exporter
+        self._validator = validator
+    
+    def process(
+        self,
+        normal_paths: list[str],
+        abnormal_paths: list[str],
+        output_dir: str,
+        test_size: float = 0.2,
+        random_state: int = 42
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+        """
+        Execute full preprocessing pipeline.
+        
+        Args:
+            normal_paths: Paths to normal condition datasets
+            abnormal_paths: Paths to failure/warning datasets
+            output_dir: Directory for output files
+            test_size: Proportion for test set
+            random_state: Random seed for reproducibility
+            
+        Returns:
+            Tuple of (train_df, test_df, validation_report)
+        """
+        print("Loading normal condition data...")
+        normal_df = self._loader.load_multiple(normal_paths)
+        normal_df = self._normal_filter.filter(normal_df)
+        print(f"Normal data loaded: {len(normal_df)} rows")
+        
+        print("\nLoading failure/warning data...")
+        abnormal_df = self._loader.load_multiple(abnormal_paths)
+        abnormal_df = self._abnormal_filter.filter(abnormal_df)
+        print(f"Abnormal data loaded: {len(abnormal_df)} rows")
+        
+        # Combine datasets
+        print("\nCombining datasets...")
+        combined_df = pd.concat([normal_df, abnormal_df], ignore_index=True)
+        
+        # Validate data quality
+        print("\nValidating data quality...")
+        is_valid, validation_report = self._validator.validate(combined_df)
+        print(f"Data validation: {'PASSED' if is_valid else 'WARNINGS DETECTED'}")
+        
+        # Split data
+        print("\nSplitting data (time-series aware)...")
+        train_df, test_df = self._splitter.split(combined_df, test_size, random_state)
+        
+        # Export
+        print(f"\nExporting to {output_dir}...")
+        self._exporter.export(train_df, test_df, output_dir)
+        
+        return train_df, test_df, validation_report
+
