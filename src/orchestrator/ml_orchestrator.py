@@ -10,17 +10,14 @@ class MLOrchestrator:
     
     def __init__(
         self,
-        feature_extractor: IFeatureExtractor,
         model: IModel,
         target_col: str = 'health_status'
     ):
         """
         Args:
-            feature_extractor: Feature extraction strategy
             model: ML/DL model implementation
             target_col: Name of target column
         """
-        self._feature_extractor = feature_extractor
         self._model = model
         self._target_col = target_col
     
@@ -32,27 +29,23 @@ class MLOrchestrator:
         model_save_path: str = None
     ) -> dict:
         """
-        Execute full ML pipeline: feature extraction, training, evaluation.
+        Execute ML training and evaluation (features already extracted in preprocessing).
         
         Args:
-            train_df: Training dataframe
-            test_df: Test dataframe
+            train_df: Training dataframe with features
+            test_df: Test dataframe with features
             model_save_path: Path to save trained model
             
         Returns:
             Dictionary with evaluation metrics
         """
-        print("Extracting features from training data...")
-        train_features = self._feature_extractor.extract(train_df)
-        print(f"Training features shape: {train_features.shape}")
-        
-        print("\nExtracting features from test data...")
-        test_features = self._feature_extractor.extract(test_df)
-        print(f"Test features shape: {test_features.shape}")
+        # Features already extracted in preprocessing step
+        print(f"Training data shape: {train_df.shape}")
+        print(f"Test data shape: {test_df.shape}")
         
         # Prepare training data
-        X_train, y_train = self._prepare_data(train_features)
-        X_test, y_test = self._prepare_data(test_features)
+        X_train, y_train = self._prepare_data(train_df)
+        X_test, y_test = self._prepare_data(test_df)
         
         print(f"\nTraining model on {X_train.shape[0]} samples with {X_train.shape[1]} features...")
         self._model.train(X_train, y_train)
@@ -74,12 +67,18 @@ class MLOrchestrator:
         return metrics
     
     def _prepare_data(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-        """Separate features and target."""
+        """Separate features and target, dropping specified columns."""
+        drop_cols = ["timestamp", "health_status", "run_id"]
         if self._target_col not in df.columns:
             raise ValueError(f"Target column '{self._target_col}' not found in dataframe")
-        
-        X = df.drop(columns=[self._target_col]).select_dtypes(include=[np.number]).values
+
+        # Drop target and any columns in drop_cols that exist in df
+        cols_to_drop = [col for col in drop_cols if col in df.columns]
+        if self._target_col not in cols_to_drop:
+            cols_to_drop = cols_to_drop + [self._target_col]
+
+        X = df.drop(columns=cols_to_drop, errors='ignore').select_dtypes(include=[np.number]).values
         y = df[self._target_col].values
-        
+
         return X, y
 

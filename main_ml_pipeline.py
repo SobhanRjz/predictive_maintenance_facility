@@ -20,7 +20,8 @@ def main():
         use_stratification=dataset_config.use_stratification,
         window_size=dataset_config.window_size,
         resample_freq=dataset_config.resample_freq,
-        resample_method=dataset_config.resample_method
+        resample_method=dataset_config.resample_method,
+        extract_features=True  # Extract features before splitting
     )
     
     train_df, test_df, validation_report = preprocessing_orchestrator.process(

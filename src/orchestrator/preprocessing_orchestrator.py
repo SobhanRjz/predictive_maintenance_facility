@@ -1,7 +1,7 @@
 """Main orchestrator for preprocessing pipeline."""
 import pandas as pd
 from pathlib import Path
-from src.core.interfaces import IDataFilter, IDataSplitter, IDataExporter
+from src.core.interfaces import IDataFilter, IDataSplitter, IDataExporter, IFeatureExtractor
 from src.loaders.data_loader import MultiFileLoader
 from src.validators.data_validator import DataValidator
 
@@ -16,7 +16,8 @@ class PreprocessingOrchestrator:
         abnormal_filter: IDataFilter,
         splitter: IDataSplitter,
         exporter: IDataExporter,
-        validator: DataValidator
+        validator: DataValidator,
+        feature_extractor: IFeatureExtractor = None
     ):
         self._loader = loader
         self._normal_filter = normal_filter
@@ -24,6 +25,7 @@ class PreprocessingOrchestrator:
         self._splitter = splitter
         self._exporter = exporter
         self._validator = validator
+        self._feature_extractor = feature_extractor
     
     def process(
         self,
@@ -66,8 +68,14 @@ class PreprocessingOrchestrator:
         is_valid, validation_report = self._validator.validate(combined_df)
         print(f"Data validation: {'PASSED' if is_valid else 'WARNINGS DETECTED'}")
         
+        # Extract features BEFORE splitting (correct ML pipeline order)
+        if self._feature_extractor:
+            print("\nExtracting features from combined data...")
+            combined_df = self._feature_extractor.extract(combined_df)
+            print(f"Features extracted: {combined_df.shape}")
+        
         # Split data
-        print("\nSplitting data (time-series aware)...")
+        print("\nSplitting data...")
         train_df, test_df = self._splitter.split(combined_df, test_size, random_state)
         
         # Export

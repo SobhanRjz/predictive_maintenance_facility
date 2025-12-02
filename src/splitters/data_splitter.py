@@ -28,14 +28,23 @@ class RunIdSplitter(IDataSplitter):
             if 'timestamp' in run_data.columns:
                 run_data = run_data.sort_values('timestamp').reset_index(drop=True)
 
-            # Calculate split point
-            n_samples = len(run_data)
-            n_test = int(n_samples * test_size)
-            n_train = n_samples - n_test
+            # Use stratified split for each CSV/run if possible (if stratify column exists & has >1 class)
+            if 'health_status' in run_data.columns and len(run_data['health_status'].unique()) > 1:
+                stratify_labels = run_data['health_status']
+            else:
+                stratify_labels = None
 
-            # Take first 80% for training, last 20% for testing (temporal split)
-            train_data = run_data.iloc[:n_train].copy()
-            test_data = run_data.iloc[n_train:].copy()
+            train_data, test_data = train_test_split(
+                run_data,
+                test_size=test_size,
+                random_state=random_state,
+                stratify=stratify_labels
+            )
+
+            # Sort back by timestamp after splitting to preserve temporal order
+            if 'timestamp' in run_data.columns:
+                train_data = train_data.sort_values('timestamp').reset_index(drop=True)
+                test_data = test_data.sort_values('timestamp').reset_index(drop=True)
 
             train_dfs.append(train_data)
             test_dfs.append(test_data)

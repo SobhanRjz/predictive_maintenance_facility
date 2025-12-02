@@ -54,7 +54,7 @@ class ModelTester:
 
         # Prepare features for prediction
         feature_cols = [col for col in features_df.columns
-                       if col not in ['timestamp', 'health_status']]
+                       if col not in ['timestamp', 'health_status', "run_id"]]
         X = features_df[feature_cols].values
 
         # Make predictions

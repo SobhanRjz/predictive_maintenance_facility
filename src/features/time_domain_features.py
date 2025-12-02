@@ -29,6 +29,7 @@ class TimeDomainFeatureExtractor(IFeatureExtractor):
     def extract(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Fast time-domain feature extraction using vectorized groupby ops.
+        Groups by both time window and run_id to prevent mixing data from different CSVs.
         """
         df = df.copy()
         df[self._timestamp_col] = pd.to_datetime(df[self._timestamp_col])
@@ -43,18 +44,21 @@ class TimeDomainFeatureExtractor(IFeatureExtractor):
         # Group by time windows
         df["_window"] = df[self._timestamp_col].dt.floor(self._window_size)
 
+        # Determine grouping keys: use run_id if present to prevent mixing CSVs with same timestamps
+        group_keys = ["_window", "run_id"] if "run_id" in df.columns else ["_window"]
+
         # --- 1) Basic stats (vectorized) ---
-        g = df.groupby("_window")[sensor_cols]
+        g = df.groupby(group_keys)[sensor_cols]
 
         means = g.mean()
-        stds = g.std(ddof=0)           # match np.std default
+        stds = g.std(ddof=0)
         mins = g.min()
         maxs = g.max()
 
         # --- 2) RMS (sqrt of mean of squares) ---
         df_sq = df.copy()
         df_sq[sensor_cols] = df_sq[sensor_cols] ** 2
-        rms = df_sq.groupby("_window")[sensor_cols].mean()
+        rms = df_sq.groupby(group_keys)[sensor_cols].mean()
         rms = rms.apply(np.sqrt)
 
         # --- 3) Peak-to-peak (max - min) ---
@@ -62,10 +66,9 @@ class TimeDomainFeatureExtractor(IFeatureExtractor):
 
         # --- 4) Skewness & kurtosis (vectorized) ---
         skew = g.skew()
-        kurt = g.apply(lambda x: x.kurt())  # DataFrameGroupBy.kurt often exists, but this is safe
+        kurt = g.apply(lambda x: x.kurt())
 
         # --- 5) Combine everything into one wide feature table ---
-        # Build a multi-index columns DataFrame then flatten
         stats_dict = {
             "mean": means,
             "std": stds,
@@ -77,22 +80,22 @@ class TimeDomainFeatureExtractor(IFeatureExtractor):
             "kurtosis": kurt,
         }
 
-        features = pd.concat(stats_dict, axis=1)  # columns: (stat, sensor)
+        features = pd.concat(stats_dict, axis=1)
 
         # Flatten MultiIndex → col_stat
         features.columns = [
             f"{sensor}_{stat}" for stat, sensor in features.columns.to_flat_index()
         ]
 
-        # --- 6) Target: majority vote per window (like before) ---
+        # --- 6) Target: majority vote per window ---
         if self._target_col in df.columns:
             target = (
-                df.groupby("_window")[self._target_col]
+                df.groupby(group_keys)[self._target_col]
                 .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else np.nan)
             )
             features[self._target_col] = target
 
-        # --- 7) Replace _window with timestamp col name and reset index ---
+        # --- 7) Reset index and rename _window to timestamp ---
         features = features.reset_index().rename(columns={"_window": self._timestamp_col})
 
         return features

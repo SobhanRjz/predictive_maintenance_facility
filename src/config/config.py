@@ -31,9 +31,9 @@ class DatasetConfig:
         'failure_4_cavitation.csv',
         'failure_5_pipe_blockage.csv',
         'failure_6_motor_overload.csv',
-        # 'failure_7_voltage_drop.csv',
-        # 'failure_8_seal_failure.csv',
-        # 'failure_9_impeller_wear.csv'
+        'failure_7_voltage_drop.csv',
+        'failure_8_seal_failure.csv',
+        'failure_9_impeller_wear.csv'
     ])
 
     warning_files: list[str] = field(default_factory=lambda: [
@@ -44,14 +44,14 @@ class DatasetConfig:
         'warning_5_casing_temp_increase.csv',
         'warning_6_suction_pressure_drop.csv',
         'warning_7_discharge_pressure_drop.csv',
-        # 'warning_8_flow_rate_decrease.csv',
-        # 'warning_9_power_increase.csv',
-        # 'warning_10_current_increase.csv',
-        # 'warning_11_voltage_drop.csv',
-        # 'warning_12_acoustic_noise_increase.csv',
-        # 'warning_13_outlet_fluid_temp_increase.csv',
-        # 'warning_14_flow_pressure_power_fluctuation.csv',
-        # 'warning_15_bearing_vibration_temp_increase.csv'
+        'warning_8_flow_rate_decrease.csv',
+        'warning_9_power_increase.csv',
+        'warning_10_current_increase.csv',
+        'warning_11_voltage_drop.csv',
+        'warning_12_acoustic_noise_increase.csv',
+        'warning_13_outlet_fluid_temp_increase.csv',
+        'warning_14_flow_pressure_power_fluctuation.csv',
+        'warning_15_bearing_vibration_temp_increase.csv'
     ])
     
     def get_normal_paths(self) -> list[str]:

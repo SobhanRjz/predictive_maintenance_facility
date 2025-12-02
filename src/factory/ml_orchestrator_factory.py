@@ -1,6 +1,5 @@
 """Factory for creating ML orchestrator with dependencies."""
 from src.orchestrator.ml_orchestrator import MLOrchestrator
-from src.features.time_domain_features import TimeDomainFeatureExtractor
 from src.models.xgboost_model import XGBoostModel
 
 
@@ -21,7 +20,7 @@ class MLOrchestratorFactory:
         Create ML orchestrator with dependencies.
 
         Args:
-            feature_window_size: Time window for feature extraction
+            feature_window_size: Not used (features extracted in preprocessing)
             n_estimators: XGBoost number of trees
             max_depth: XGBoost max tree depth
             learning_rate: XGBoost learning rate
@@ -29,11 +28,6 @@ class MLOrchestratorFactory:
             random_state: Random seed
             early_stopping_rounds: Early stopping rounds (None to disable)
         """
-        feature_extractor = TimeDomainFeatureExtractor(
-            window_size=feature_window_size,
-            target_col=target_col
-        )
-
         model = XGBoostModel(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -44,7 +38,6 @@ class MLOrchestratorFactory:
         )
 
         return MLOrchestrator(
-            feature_extractor=feature_extractor,
             model=model,
             target_col=target_col
         )
