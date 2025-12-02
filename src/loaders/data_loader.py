@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from src.core.interfaces import IDataLoader
-
+from concurrent.futures import ThreadPoolExecutor
 
 class CSVLoader(IDataLoader):
     """Loads CSV files."""
@@ -95,27 +95,34 @@ class MultiFileLoader:
                 'Normal': 'Normal'  # Already correct
             })
         return df
+    
 
-    def load_multiple(self, paths: list[str]) -> pd.DataFrame:
-        """Load and concatenate multiple files."""
-        dfs = []
+    def _load_single(self, path: str) -> pd.DataFrame:
+        import os
+        _, ext = os.path.splitext(path)
+        ext = ext.lower()
+
+        loader = self._excel_loader if ext in ('.xlsx', '.xls') else self._csv_loader
+        df = loader.load(path)
+
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed', errors='coerce')
+            df = self.clean_health_status(df)
+            if self._resampler is not None:
+                df = self._resampler.resample(df)
+        return df
+
+    def load_multiple(self, paths: list[str], start_run_id: int = 1) -> pd.DataFrame:
+        """Load multiple files with sequential run_id assignment."""
+        if not paths:
+            return pd.DataFrame()
+
+        dfs_with_run_ids = []
+        current_run_id = start_run_id
         for path in paths:
-            suffix = Path(path).suffix.lower()
-            loader = self._excel_loader if suffix in ['.xlsx', '.xls'] else self._csv_loader
-            df = loader.load(path)
-            dfs.append(df)
-        combined = pd.concat(dfs, ignore_index=True)
+            df = self._load_single(path)
+            df['run_id'] = current_run_id  # Add run_id column
+            dfs_with_run_ids.append(df)
+            current_run_id += 1
 
-        # Ensure timestamp is datetime
-        if 'timestamp' in combined.columns:
-            combined['timestamp'] = pd.to_datetime(combined['timestamp'])
-
-            # Clean health status values (fix truncation)
-            combined = self.clean_health_status(combined)
-
-            # Resample if resampler is provided
-            if self._resampler:
-                combined = self._resampler.resample(combined)
-
-        return combined
-
+        return pd.concat(dfs_with_run_ids, ignore_index=True)

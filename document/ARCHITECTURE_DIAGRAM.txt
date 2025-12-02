@@ -1,0 +1,130 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        EXTENDED ML ARCHITECTURE                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          CONFIGURATION LAYER                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  DatasetConfig                    MLConfig                                   │
+│  - paths, splits                  - hyperparameters                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            FACTORY LAYER                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  OrchestratorFactory              MLOrchestratorFactory                      │
+│  - Creates preprocessing          - Creates ML orchestrator                  │
+│    orchestrator with DI             with feature extractor + model           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ORCHESTRATOR LAYER                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  PreprocessingOrchestrator        MLOrchestrator                            │
+│  - Coordinates preprocessing      - Coordinates ML pipeline                  │
+│  - Returns train/test DataFrames  - Returns metrics                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         STRATEGY LAYER (Interfaces)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  IDataLoader    IDataFilter    IDataSplitter    IDataExporter               │
+│  IFeatureExtractor [NEW]       IModel [NEW]                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      IMPLEMENTATION LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  LOADERS              FILTERS           SPLITTERS         EXPORTERS          │
+│  - CSVLoader          - ExcludeNormal   - TimeSeries      - CSVExporter     │
+│  - ExcelLoader        - IncludeNormal   - Stratified                        │
+│  - MultiFileLoader                      - StratifiedTS                       │
+│                                                                              │
+│  FEATURES [NEW]       MODELS [NEW]                                          │
+│  - TimeDomain         - XGBoostModel                                        │
+│    Extractor          - BaseDLModel (abstract)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                            DATA FLOW PIPELINE                                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+    Raw CSV/Excel Files
+           │
+           ▼
+    ┌──────────────────┐
+    │ MultiFileLoader  │  ← Load & Resample
+    └──────────────────┘
+           │
+           ▼
+    ┌──────────────────┐
+    │ Condition Filter │  ← Separate Normal/Abnormal
+    └──────────────────┘
+           │
+           ▼
+    ┌──────────────────┐
+    │ Data Validator   │  ← Check Quality
+    └──────────────────┘
+           │
+           ▼
+    ┌──────────────────┐
+    │ Time Splitter    │  ← Train/Test Split
+    └──────────────────┘
+           │
+           ▼
+    ┌──────────────────┐
+    │  CSV Exporter    │  ← Save to Disk
+    └──────────────────┘
+           │
+           ▼
+    Train/Test DataFrames
+           │
+           ▼
+    ┌──────────────────┐
+    │ Feature Extract  │  ← Time Domain Features
+    └──────────────────┘
+           │
+           ▼
+    ┌──────────────────┐
+    │  XGBoost Model   │  ← Train & Evaluate
+    └──────────────────┘
+           │
+           ▼
+    Trained Model + Metrics
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         EXTENSIBILITY POINTS                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CURRENT IMPLEMENTATION              FUTURE EXTENSIONS                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ TimeDomainFeatureExtractor    →     FrequencyDomainFeatureExtractor         │
+│                                      WaveletFeatureExtractor                 │
+│                                      DeepFeatureExtractor                    │
+│                                                                              │
+│ XGBoostModel                  →     LSTMModel                               │
+│                                      CNNModel                                │
+│                                      TransformerModel                        │
+│                                      EnsembleModel                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+All extensions implement existing interfaces - no orchestrator changes needed!
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          DESIGN PATTERNS USED                                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+1. STRATEGY PATTERN      → All components implement interfaces (IModel, etc.)
+2. FACTORY PATTERN       → Centralized object creation with DI
+3. ORCHESTRATOR PATTERN  → High-level workflow coordination
+4. COMPOSITION PATTERN   → MultiFileLoader composes loaders + resampler
+5. CONFIGURATION PATTERN → Dataclass-based immutable configs
+

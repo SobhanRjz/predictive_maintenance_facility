@@ -1,4 +1,4 @@
-"""Configuration for preprocessing pipeline."""
+"""Configuration for preprocessing and ML pipeline."""
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,8 +11,8 @@ class DatasetConfig:
     output_dir: str = 'datasets\\processed_data'
     test_size: float = 0.2
     random_state: int = 42
-    use_timeseries_split: bool = True
-    use_stratification: bool = True
+    use_timeseries_split: bool = False
+    use_stratification: bool = False
     window_size: str = '10T'  # 10 minutes for 1-minute interval data
 
     # Resampling configuration (30sec -> 1min) all files should be same sampling rate
@@ -26,11 +26,11 @@ class DatasetConfig:
 
     failure_files: list[str] = field(default_factory=lambda: [
         'failure_1_bearing_fault.csv',
-        # 'failure_2_shaft_misalignment.csv',
-        # 'failure_3_rotor_imbalance.csv',
-        # 'failure_4_cavitation.csv',
-        # 'failure_5_pipe_blockage.csv',
-        # 'failure_6_motor_overload.csv',
+        'failure_2_shaft_misalignment.csv',
+        'failure_3_rotor_imbalance.csv',
+        'failure_4_cavitation.csv',
+        'failure_5_pipe_blockage.csv',
+        'failure_6_motor_overload.csv',
         # 'failure_7_voltage_drop.csv',
         # 'failure_8_seal_failure.csv',
         # 'failure_9_impeller_wear.csv'
@@ -38,12 +38,12 @@ class DatasetConfig:
 
     warning_files: list[str] = field(default_factory=lambda: [
         'warning_1_radial_vibration_increase.csv',
-        # 'warning_2_axial_vibration_increase.csv',
-        # 'warning_3_bearing_temp_increase.csv',
-        # 'warning_4_oil_temp_increase.csv',
-        # 'warning_5_casing_temp_increase.csv',
-        # 'warning_6_suction_pressure_drop.csv',
-        # 'warning_7_discharge_pressure_drop.csv',
+        'warning_2_axial_vibration_increase.csv',
+        'warning_3_bearing_temp_increase.csv',
+        'warning_4_oil_temp_increase.csv',
+        'warning_5_casing_temp_increase.csv',
+        'warning_6_suction_pressure_drop.csv',
+        'warning_7_discharge_pressure_drop.csv',
         # 'warning_8_flow_rate_decrease.csv',
         # 'warning_9_power_increase.csv',
         # 'warning_10_current_increase.csv',
@@ -91,6 +91,7 @@ class DatasetConfig:
 
     def _get_converted_filename(self, original_filename: str) -> str:
         """Convert original filename to its CSV equivalent."""
+        from src.utils.file_renamer import FileRenamer
         renamer = FileRenamer()
         if original_filename in renamer.FILENAME_MAP:
             return renamer.FILENAME_MAP[original_filename]
@@ -98,3 +99,22 @@ class DatasetConfig:
             # Fallback: just change extension to .csv
             return original_filename.replace('.xlsx', '.csv').replace('.xls', '.csv')
 
+
+@dataclass
+class MLConfig:
+    """Configuration for ML training pipeline."""
+
+    model_output_dir: str = 'models'
+    feature_window_size: str = '10T'  # Time window for feature extraction
+
+    # XGBoost hyperparameters
+    n_estimators: int = 1000  # Increased for more training steps
+    max_depth: int = 8  # Increased from 6 to 8 for more complex patterns
+    learning_rate: float = 0.05  # Reduced for better generalization
+
+    # Early stopping parameters (optional)
+    early_stopping_rounds: int = 100  # Increased to allow more training
+    eval_metric: str = 'mlogloss'
+
+    target_col: str = 'health_status'
+    random_state: int = 42

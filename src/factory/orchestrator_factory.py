@@ -38,14 +38,18 @@ class OrchestratorFactory:
         normal_filter = IncludeOnlyNormalFilter()
         abnormal_filter = ExcludeNormalFilter()
 
-        if use_timeseries_split and use_stratification:
-            splitter = StratifiedTimeSeriesSplitter(window_size=window_size)
-        elif use_timeseries_split:
-            splitter = TimeSeriesSplitter()
-        else:
-            from src.splitters.data_splitter import StratifiedSplitter
-            splitter = StratifiedSplitter()
+        # if use_timeseries_split and use_stratification:
+        #     splitter = StratifiedTimeSeriesSplitter(window_size=window_size)
+        # elif use_timeseries_split:
+        #     splitter = TimeSeriesSplitter()
+        # else:
+        #     from src.splitters.data_splitter import StratifiedSplitter
+        #     splitter = StratifiedSplitter()
 
+                # Use run_id based splitting instead of time-series or stratified
+        from src.splitters.data_splitter import RunIdSplitter
+        splitter = RunIdSplitter()
+        
         exporter = CSVExporter()
         validator = DataValidator()
 

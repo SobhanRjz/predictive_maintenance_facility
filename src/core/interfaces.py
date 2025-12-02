@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Protocol
 import pandas as pd
+import numpy as np
 
 
 class IDataLoader(ABC):
@@ -39,3 +40,40 @@ class IDataExporter(ABC):
         """Export train and test datasets."""
         pass
 
+
+class IFeatureExtractor(ABC):
+    """Interface for extracting features from time-series data."""
+    
+    @abstractmethod
+    def extract(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Extract features from dataframe."""
+        pass
+
+
+class IModel(ABC):
+    """Interface for ML/DL models."""
+    
+    @abstractmethod
+    def train(self, X_train: np.ndarray, y_train: np.ndarray) -> None:
+        """Train model on training data."""
+        pass
+    
+    @abstractmethod
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Predict on input data."""
+        pass
+    
+    @abstractmethod
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> dict:
+        """Evaluate model performance."""
+        pass
+    
+    @abstractmethod
+    def save(self, path: str) -> None:
+        """Save model to disk."""
+        pass
+    
+    @abstractmethod
+    def load(self, path: str) -> None:
+        """Load model from disk."""
+        pass

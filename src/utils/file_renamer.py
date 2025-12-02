@@ -56,7 +56,6 @@ class FileRenamer:
     FILENAME_MAP: Dict[str, str] = {
         # Normal files
         'حالت_نرمال_۳ماهه_گام۳۰ثانیه-1.csv': 'normal_3months_30sec_interval-1.csv',
-        'حالت_نرمال_3ماهه_گام30ثانیه-2.csv': 'normal_3months_30sec_interval-2.csv',
         
         # Failure files
         'خرابی1_یاتاقان.csv': 'failure_1_bearing_fault.csv',

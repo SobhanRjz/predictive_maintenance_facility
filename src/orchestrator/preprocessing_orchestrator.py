@@ -47,12 +47,13 @@ class PreprocessingOrchestrator:
             Tuple of (train_df, test_df, validation_report)
         """
         print("Loading normal condition data...")
-        normal_df = self._loader.load_multiple(normal_paths)
+        normal_df = self._loader.load_multiple(normal_paths, start_run_id=1)
         normal_df = self._normal_filter.filter(normal_df)
         print(f"Normal data loaded: {len(normal_df)} rows")
-        
+
         print("\nLoading failure/warning data...")
-        abnormal_df = self._loader.load_multiple(abnormal_paths)
+        next_run_id = len(normal_paths) + 1
+        abnormal_df = self._loader.load_multiple(abnormal_paths, start_run_id=next_run_id)
         abnormal_df = self._abnormal_filter.filter(abnormal_df)
         print(f"Abnormal data loaded: {len(abnormal_df)} rows")
         
