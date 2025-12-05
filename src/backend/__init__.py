@@ -1,0 +1,1 @@
+"""Backend package for data streaming and processing."""
