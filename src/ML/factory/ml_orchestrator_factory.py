@@ -1,6 +1,6 @@
 """Factory for creating ML orchestrator with dependencies."""
-from src.orchestrator.ml_orchestrator import MLOrchestrator
-from src.models.xgboost_model import XGBoostModel
+from src.ML.orchestrator.ml_orchestrator import MLOrchestrator
+from src.ML.models.xgboost_model import XGBoostModel
 
 
 class MLOrchestratorFactory:
@@ -8,7 +8,7 @@ class MLOrchestratorFactory:
     
     @staticmethod
     def create(
-        feature_window_size: str = '10T',
+        feature_window_size: str = '10min',
         n_estimators: int = 500,
         max_depth: int = 6,
         learning_rate: float = 0.1,

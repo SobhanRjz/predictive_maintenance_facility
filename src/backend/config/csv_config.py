@@ -21,3 +21,4 @@ class CSVConfig:
     status_map: Dict[str, int]
     sleep_seconds: float
     loop_forever: bool
+    is_csv_status_enabled: bool

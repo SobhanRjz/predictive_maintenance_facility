@@ -1,12 +1,12 @@
 """Factory for creating orchestrator with dependencies."""
-from src.orchestrator.preprocessing_orchestrator import PreprocessingOrchestrator
-from src.loaders.data_loader import CSVLoader, ExcelLoader, MultiFileLoader, DataResampler
-from src.filters.condition_filter import ExcludeNormalFilter, IncludeOnlyNormalFilter
-from src.splitters.timeseries_splitter import TimeSeriesSplitter, StratifiedTimeSeriesSplitter
-from src.exporters.data_exporter import CSVExporter
-from src.validators.data_validator import DataValidator
-from src.features.time_domain_features import TimeDomainFeatureExtractor
-
+from src.ML.orchestrator.preprocessing_orchestrator import PreprocessingOrchestrator
+from src.ML.loaders.data_loader import CSVLoader, ExcelLoader, MultiFileLoader, DataResampler
+from src.ML.filters.condition_filter import ExcludeNormalFilter, IncludeOnlyNormalFilter
+from src.ML.splitters.timeseries_splitter import TimeSeriesSplitter, StratifiedTimeSeriesSplitter
+from src.ML.exporters.data_exporter import CSVExporter
+from src.ML.validators.data_validator import DataValidator
+from src.ML.features.time_domain_features import TimeDomainFeatureExtractor
+from src.ML.splitters.data_splitter import RunIdSplitter
 
 class OrchestratorFactory:
     """Factory for creating configured preprocessing orchestrator."""
@@ -15,7 +15,7 @@ class OrchestratorFactory:
     def create(
         use_timeseries_split: bool = True,
         use_stratification: bool = True,
-        window_size: str = '10T',
+        window_size: str = '10min',
         resample_freq: str = '1T',
         resample_method: str = 'mean',
         extract_features: bool = True
@@ -26,7 +26,7 @@ class OrchestratorFactory:
         Args:
             use_timeseries_split: If True, uses chronological split
             use_stratification: If True with use_timeseries_split, uses stratified time-series split
-            window_size: Window size for feature extraction and splitting (e.g., '10T', '1H')
+            window_size: Window size for feature extraction and splitting (e.g., '10min', '1H')
             resample_freq: Resampling frequency (e.g., '1T' for 1 minute)
             resample_method: Resampling aggregation method ('mean', 'max', 'min', 'first', 'last')
             extract_features: If True, extract features before splitting (recommended)
@@ -42,7 +42,7 @@ class OrchestratorFactory:
         abnormal_filter = ExcludeNormalFilter()
 
         # Use run_id based splitting for proper train/test separation by CSV file
-        from src.splitters.data_splitter import RunIdSplitter
+        
         splitter = RunIdSplitter()
         
         # Feature extractor (applied before splitting)

@@ -13,7 +13,7 @@ class DatasetConfig:
     random_state: int = 42
     use_timeseries_split: bool = False
     use_stratification: bool = False
-    window_size: str = '10T'  # 10 minutes for 1-minute interval data
+    window_size: str = '10min'  # 10 minutes for 1-minute interval data
 
     # Resampling configuration (30sec -> 1min) all files should be same sampling rate
     resample_freq: str = '1min'  # 1 minute
@@ -105,7 +105,7 @@ class MLConfig:
     """Configuration for ML training pipeline."""
 
     model_output_dir: str = 'models'
-    feature_window_size: str = '10T'  # Time window for feature extraction
+    feature_window_size: str = '10min'  # Time window for feature extraction
 
     # XGBoost hyperparameters
     n_estimators: int = 1000  # Increased for more training steps

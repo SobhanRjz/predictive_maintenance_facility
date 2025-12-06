@@ -6,7 +6,7 @@ import joblib
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, classification_report
 from xgboost import XGBClassifier
-from src.core.interfaces import IModel
+from src.ML.core.interfaces import IModel
 
 
 class XGBoostModel(IModel):
@@ -46,7 +46,16 @@ class XGBoostModel(IModel):
         )
         self._label_encoder = LabelEncoder()
         self._is_fitted = False
-    
+        self._feature_names = None
+
+    def set_feature_names(self, feature_names: list[str]) -> None:
+        """Set feature column names for consistent ordering during inference."""
+        self._feature_names = feature_names
+
+    def get_feature_names(self) -> list[str]:
+        """Get stored feature column names."""
+        return self._feature_names
+
     def train(self, X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray = None, y_val: np.ndarray = None) -> None:
         """Train XGBoost model with class weights."""
         y_encoded = self._label_encoder.fit_transform(y_train)
@@ -112,7 +121,8 @@ class XGBoostModel(IModel):
         model_data = {
             'model': self._model,
             'label_encoder': self._label_encoder,
-            'is_fitted': self._is_fitted
+            'is_fitted': self._is_fitted,
+            'feature_names': self._feature_names
         }
         joblib.dump(model_data, path)
     
@@ -122,4 +132,5 @@ class XGBoostModel(IModel):
         self._model = model_data['model']
         self._label_encoder = model_data['label_encoder']
         self._is_fitted = model_data['is_fitted']
+        self._feature_names = model_data.get('feature_names')
 

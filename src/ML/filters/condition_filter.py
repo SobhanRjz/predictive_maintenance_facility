@@ -1,6 +1,6 @@
 """Filters for excluding/including specific health conditions."""
 import pandas as pd
-from src.core.interfaces import IDataFilter
+from src.ML.core.interfaces import IDataFilter
 
 
 class ExcludeNormalFilter(IDataFilter):

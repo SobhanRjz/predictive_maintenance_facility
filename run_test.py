@@ -158,7 +158,9 @@ def test_with_csv_rows(csv_path: str, start_row: int = None, end_row: int = None
         n_rows: Number of rows to use (alternative to start_row/end_row)
     """
     tester = ModelTester()
-
+    # results0 = tester.predict_from_files(csv_path, condition_type="")
+    # print("Prediction results:")
+    # print(results0[['timestamp', 'predicted_health_status']])
     # Read CSV file
     df = pd.read_csv(csv_path)
     print(f"Loaded {len(df)} rows from {csv_path}")
@@ -215,8 +217,9 @@ def test_with_your_data(csv_path: str):
 
 if __name__ == '__main__':
     # Test with rows from failure_1_bearing_fault.csv
-    csv_path = "datasets/datasets_renamed/failure_1_bearing_fault.csv"
+    csv_path = r"C:\Users\sobha\Desktop\TestInfluxDB\ML_GasOil\datasets\datasets_renamed\failure_1_bearing_fault.csv"
 
+    
     # Example 1: Last 10 rows (equivalent to previous behavior)
     print("Example 1: Last 10 rows")
-    test_with_csv_rows(csv_path, start_row=88300, end_row=88400, n_rows=10)
+    test_with_csv_rows(csv_path, start_row=126721, end_row=126761, n_rows=10)

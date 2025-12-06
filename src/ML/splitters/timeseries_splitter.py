@@ -2,7 +2,7 @@
 import pandas as pd
 from collections import Counter
 from typing import Tuple
-from src.core.interfaces import IDataSplitter
+from src.ML.core.interfaces import IDataSplitter
 
 
 class TimeSeriesSplitter(IDataSplitter):

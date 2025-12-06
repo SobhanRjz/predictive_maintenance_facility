@@ -1,7 +1,7 @@
 """Time domain feature extraction for sensor data."""
 import pandas as pd
 import numpy as np
-from src.core.interfaces import IFeatureExtractor
+from src.ML.core.interfaces import IFeatureExtractor
 
 
 class TimeDomainFeatureExtractor(IFeatureExtractor):
@@ -9,14 +9,14 @@ class TimeDomainFeatureExtractor(IFeatureExtractor):
     
     def __init__(
         self,
-        window_size: str = '10T',
+        window_size: str = '10min',
         timestamp_col: str = 'timestamp',
         target_col: str = 'health_status',
         exclude_cols: list[str] = None
     ):
         """
         Args:
-            window_size: Time window for feature extraction (e.g., '10T', '1H')
+            window_size: Time window for feature extraction (e.g., '10min', '1H')
             timestamp_col: Name of timestamp column
             target_col: Name of target column to preserve
             exclude_cols: Additional columns to exclude from feature extraction

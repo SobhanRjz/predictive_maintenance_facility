@@ -1,9 +1,9 @@
 """Main orchestrator for preprocessing pipeline."""
 import pandas as pd
 from pathlib import Path
-from src.core.interfaces import IDataFilter, IDataSplitter, IDataExporter, IFeatureExtractor
-from src.loaders.data_loader import MultiFileLoader
-from src.validators.data_validator import DataValidator
+from src.ML.core.interfaces import IDataFilter, IDataSplitter, IDataExporter, IFeatureExtractor
+from src.ML.loaders.data_loader import MultiFileLoader
+from src.ML.validators.data_validator import DataValidator
 
 
 class PreprocessingOrchestrator:
@@ -56,7 +56,7 @@ class PreprocessingOrchestrator:
         print("\nLoading failure/warning data...")
         next_run_id = len(normal_paths) + 1
         abnormal_df = self._loader.load_multiple(abnormal_paths, start_run_id=next_run_id)
-        abnormal_df = self._abnormal_filter.filter(abnormal_df)
+        # abnormal_df = self._abnormal_filter.filter(abnormal_df)
         print(f"Abnormal data loaded: {len(abnormal_df)} rows")
         
         # Combine datasets
@@ -74,10 +74,13 @@ class PreprocessingOrchestrator:
             combined_df = self._feature_extractor.extract(combined_df)
             print(f"Features extracted: {combined_df.shape}")
         
+        
         # Split data
         print("\nSplitting data...")
         train_df, test_df = self._splitter.split(combined_df, test_size, random_state)
-        
+        train_df = train_df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+        test_df = test_df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+
         # Export
         print(f"\nExporting to {output_dir}...")
         self._exporter.export(train_df, test_df, output_dir)

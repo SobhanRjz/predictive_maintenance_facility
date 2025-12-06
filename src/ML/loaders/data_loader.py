@@ -2,7 +2,7 @@
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from src.core.interfaces import IDataLoader
+from src.ML.core.interfaces import IDataLoader
 from concurrent.futures import ThreadPoolExecutor
 
 class CSVLoader(IDataLoader):

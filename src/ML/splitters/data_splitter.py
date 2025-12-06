@@ -1,7 +1,7 @@
 """Data splitting implementations."""
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from src.core.interfaces import IDataSplitter
+from src.ML.core.interfaces import IDataSplitter
 
 
 class RunIdSplitter(IDataSplitter):

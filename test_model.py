@@ -3,19 +3,23 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import Union, List, Dict, Any
-from src.features.time_domain_features import TimeDomainFeatureExtractor
-from src.models.xgboost_model import XGBoostModel
-
+from src.ML.features.time_domain_features import TimeDomainFeatureExtractor
+from src.ML.models.xgboost_model import XGBoostModel
+from src.ML.loaders.data_loader import MultiFileLoader
+from src.ML.filters.condition_filter import IncludeOnlyNormalFilter, ExcludeNormalFilter
+from src.ML.validators.data_validator import DataValidator
+from src.ML.loaders.data_loader import DataResampler, CSVLoader, ExcelLoader
 
 class ModelTester:
-    """Tests trained XGBoost model with raw sensor data."""
+    """Tests trained XGBoost model with raw sensor data using full preprocessing pipeline."""
 
     def __init__(
         self,
         model_path: str = "models/xgboost_model.pkl",
-        window_size: str = "10T",
+        window_size: str = "10min",
         timestamp_col: str = "timestamp",
-        target_col: str = "health_status"
+        target_col: str = "health_status",
+        start_run_id: int = 1
     ):
         """
         Args:
@@ -23,15 +27,73 @@ class ModelTester:
             window_size: Time window for feature extraction
             timestamp_col: Name of timestamp column
             target_col: Name of target column
+            start_run_id: Starting run ID for data loading
         """
         self._model_path = Path(model_path)
+        self._start_run_id = start_run_id
+
+        resampler = DataResampler(freq='1T', agg_method='mean')
+
+        csv_loader = CSVLoader()
+        excel_loader = ExcelLoader()
+        # Initialize preprocessing components (same as preprocessing orchestrator)
+        self._loader = MultiFileLoader(csv_loader, excel_loader, resampler)
+        self._normal_filter = IncludeOnlyNormalFilter()
+        self._abnormal_filter = ExcludeNormalFilter()
+        self._validator = DataValidator()
         self._feature_extractor = TimeDomainFeatureExtractor(
             window_size=window_size,
             timestamp_col=timestamp_col,
             target_col=target_col
         )
+
+        # Initialize model
         self._model = XGBoostModel()
         self._load_model()
+
+    def preprocess_data(self, data_paths: Union[str, List[str]], condition_type: str = "unknown") -> pd.DataFrame:
+        """
+        Preprocess raw sensor data files using the same pipeline as training.
+
+        Args:
+            data_paths: Path(s) to CSV file(s) with raw sensor data
+            condition_type: Type of condition data ("normal", "abnormal", or "unknown")
+
+        Returns:
+            DataFrame with extracted features ready for prediction
+        """
+        # Handle single path vs multiple paths
+        if isinstance(data_paths, str):
+            paths_list = [data_paths]
+        else:
+            paths_list = data_paths
+
+        print(f"Loading {len(paths_list)} data file(s)...")
+        df = self._loader.load_multiple(paths_list, start_run_id=self._start_run_id)
+
+        # Apply appropriate filter based on condition type
+        if condition_type == "normal":
+            df = self._normal_filter.filter(df)
+            print(f"Applied normal condition filter: {len(df)} rows")
+        elif condition_type == "abnormal":
+            df = self._abnormal_filter.filter(df)
+            print(f"Applied abnormal condition filter: {len(df)} rows")
+        else:
+            print(f"Loaded data without filtering: {len(df)} rows")
+
+        # Validate data quality
+        is_valid, validation_report = self._validator.validate(df)
+        if not is_valid:
+            print("Warning: Data validation detected issues:")
+            for issue in validation_report.get('issues', []):
+                print(f"  - {issue}")
+
+        # Extract features
+        print("Extracting features...")
+        features_df = self._feature_extractor.extract(df)
+        print(f"Features extracted: {features_df.shape}")
+
+        return features_df
 
     def _load_model(self) -> None:
         """Load trained model from disk."""
@@ -41,7 +103,7 @@ class ModelTester:
 
     def predict_from_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Make predictions from raw sensor data.
+        Make predictions from raw sensor data (includes preprocessing).
 
         Args:
             df: DataFrame with columns: timestamp, sensor readings, health_status (optional)
@@ -49,13 +111,44 @@ class ModelTester:
         Returns:
             DataFrame with predictions and probabilities
         """
-        # Extract features
+        # Preprocess the data (extract features)
         features_df = self._feature_extractor.extract(df)
 
-        # Prepare features for prediction
-        feature_cols = [col for col in features_df.columns
-                       if col not in ['timestamp', 'health_status', "run_id"]]
-        X = features_df[feature_cols].values
+        # Make predictions using the processed features
+        return self.predict_from_features(features_df)
+
+    def predict_from_files(self, data_paths: Union[str, List[str]], condition_type: str = "unknown") -> pd.DataFrame:
+        """
+        Make predictions from raw sensor data files (includes full preprocessing pipeline).
+
+        Args:
+            data_paths: Path(s) to CSV file(s) with raw sensor data
+            condition_type: Type of condition data ("normal", "abnormal", or "unknown")
+
+        Returns:
+            DataFrame with predictions and probabilities
+        """
+        # Preprocess the data files
+        features_df = self.preprocess_data(data_paths, condition_type)
+
+        # Make predictions using the processed features
+        return self.predict_from_features(features_df)
+
+    def predict_from_features(self, features_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Make predictions from preprocessed feature data.
+
+        Args:
+            features_df: DataFrame with extracted features
+
+        Returns:
+            DataFrame with predictions and probabilities
+        """
+        # Prepare features for prediction using stored feature names
+        feature_names = self._model.get_feature_names()
+        if feature_names is None:
+            raise RuntimeError("Model was not trained with feature names. Retrain the model to enable inference.")
+        X = features_df[feature_names].values
 
         # Make predictions
         predictions = self._model.predict(X)
@@ -88,7 +181,7 @@ class ModelTester:
         df = pd.DataFrame([sensor_data])
         df['timestamp'] = pd.Timestamp.now()
 
-        # Make prediction
+        # Make prediction (includes feature extraction for single row)
         results = self.predict_from_raw_data(df)
 
         # Convert to dictionary
@@ -98,6 +191,36 @@ class ModelTester:
         result_dict.pop('timestamp', None)
 
         return result_dict
+
+    @staticmethod
+    def test_with_preprocessing_example():
+        """
+        Example of how to use the ModelTester with full preprocessing pipeline.
+
+        This demonstrates the recommended approach for testing with raw sensor data files.
+        """
+        # Initialize tester
+        tester = ModelTester()
+
+        # Example 1: Test with raw sensor data files
+        # test_data_paths = ["data/test/normal_condition.csv", "data/test/abnormal_condition.csv"]
+        # results = tester.predict_from_files(test_data_paths, condition_type="unknown")
+
+        # Example 2: Test with DataFrame of raw sensor data
+        # raw_data = ModelTester.create_sample_data(50)
+        # results = tester.predict_from_raw_data(raw_data)
+
+        # Example 3: Test single sensor reading window
+        # sensor_reading = {
+        #     'accelerometer_g': 0.3,
+        #     'vibration_velocity_mm_s': 3.2,
+        #     'shaft_displacement_um': 40.0,
+        #     # ... other sensor readings
+        # }
+        # result = tester.predict_single_window(sensor_reading)
+
+        print("ModelTester now includes full preprocessing pipeline!")
+        print("Use predict_from_files() for raw data files or predict_from_raw_data() for DataFrames")
 
     @staticmethod
     def create_sample_data(n_rows: int = 100) -> pd.DataFrame:

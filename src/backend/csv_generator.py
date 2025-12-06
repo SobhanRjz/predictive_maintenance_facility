@@ -3,14 +3,20 @@
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Tuple
+from typing import Tuple, List
 
 import pandas as pd
 from influxdb_client import InfluxDBClient, Point, WriteOptions
 
-from config.csv_config import InfluxDBConfig, CSVConfig
-from config.logger_config import LoggerConfig
-from interfaces import IInfluxDBClient, ICSVLoader, IDataConverter, IDataStreamer
+from src.backend.config import InfluxDBConfig, CSVConfig
+from src.backend.config import LoggerConfig
+from src.backend.interfaces import IInfluxDBClient, ICSVLoader, IDataConverter, IDataStreamer
+
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.join(os.path.dirname(__file__)))))
+# Import ML components
+from src.ML.inference import MLInference
 
 
 class InfluxDBClientManager(IInfluxDBClient):
@@ -48,6 +54,7 @@ class CSVLoader(ICSVLoader):
             raise ValueError("CSV must contain a 'timestamp' column")
 
         df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df.dropna(inplace=True)
         return df
 
 
@@ -102,20 +109,64 @@ class DataStreamer(IDataStreamer):
         self.influx_config = influx_config
         self.csv_config = csv_config
         self.logger = logger
+        self._is_csv_status_enabled = csv_config.is_csv_status_enabled
+
+        # Initialize ML inference
+        try:
+            self.ml_inference = MLInference(logger=self.logger)
+            self.logger.info("ML inference initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize ML inference: {e}")
+            self.ml_inference = None
 
     def stream(self, df: pd.DataFrame) -> None:
         """Stream dataframe to InfluxDB."""
         client = self.client_manager.create_client()
         write_api = client.write_api(write_options=WriteOptions(batch_size=1))
-
+        status_str = "Normal"
         try:
             while True:
+                batch_rows: List[pd.Series] = []
+                batch_indices: List[int] = []
+
                 for index, row in df.iterrows():
+                    # Collect row data for batch processing
+                    # Check that none of the values in the row are None or empty string
+                    # Check for None, empty strings, or any NaN in the row
+                    if any(
+                        v is None or (isinstance(v, str) and v.strip() == "")
+                        for v in row
+                    ) or row.isna().any():
+                        self.logger.warning(f"Skipping row {index} due to None, empty string, or NaN values: {row.to_dict()}")
+                    else:
+                        batch_rows.append(row.copy())
+                        batch_indices.append(index)
+                        
+
+                    if not self._is_csv_status_enabled: 
+                        # Process batch when we have 10 rows
+                        if len(batch_rows) == 5:
+                            try:
+                                status_str = self._process_ml_batch(batch_rows, batch_indices)
+                                batch_rows.clear()
+                                batch_indices.clear()
+                                row['health_status'] = status_str
+                            except Exception as e:
+                                self.logger.error(f"Error processing ML batch: {e}")
+                        else:
+                            row['health_status'] = status_str
+
+
+                    # Write to InfluxDB
                     point, now = self.converter.row_to_point(row, self.csv_config.measurement_name)
                     write_api.write(bucket=self.influx_config.bucket, org=self.influx_config.org, record=point)
                     self.logger.info(f"Wrote point for row {index} at {now.isoformat()}")
 
+
+
                     time.sleep(self.csv_config.sleep_seconds)
+
+                status_str = "Normal"
 
                 if not self.csv_config.loop_forever:
                     self.logger.info("Finished streaming CSV once. Exiting.")
@@ -125,6 +176,24 @@ class DataStreamer(IDataStreamer):
 
         finally:
             self.client_manager.close()
+
+    def _process_ml_batch(self, rows: List[pd.Series], indices: List[int]) -> None:
+        """Process a batch of 10 rows through the ML model."""
+        if not self.ml_inference:
+            self.logger.warning("ML inference not available, skipping batch processing")
+            return
+
+        try:
+            # Create DataFrame from batch rows
+            batch_df = pd.DataFrame(rows)
+
+            # Run ML predictions
+            predictions_df = self.ml_inference.predict_batch(batch_df)
+            status_str = predictions_df.iloc[0]['predicted_health_status']
+            return status_str
+
+        except Exception as e:
+            self.logger.error(f"Error processing ML batch: {e}")
 
 
 class CSVGeneratorOrchestrator:
@@ -160,7 +229,7 @@ def create_default_config() -> Tuple[InfluxDBConfig, CSVConfig]:
     )
 
     csv_config = CSVConfig(
-        path=r"datasets\datasets_renamed\normal_3months_30sec_interval-1.csv",
+        path=r"C:\Users\sobha\Desktop\TestInfluxDB\ML_GasOil\datasets\datasets_renamed\TestForModel_Layer1.csv",
         measurement_name="sensor_measurements",
         status_map={
             "Normal": 0,
@@ -169,7 +238,8 @@ def create_default_config() -> Tuple[InfluxDBConfig, CSVConfig]:
             "Error": 2,
         },
         sleep_seconds=2.0,
-        loop_forever=True
+        loop_forever=True,
+        is_csv_status_enabled=False
     )
 
     return influx_config, csv_config

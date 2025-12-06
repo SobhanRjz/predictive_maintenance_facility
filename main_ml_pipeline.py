@@ -1,11 +1,25 @@
 """Main script for complete ML pipeline: preprocessing + training."""
-from src.config.config import DatasetConfig, MLConfig
-from src.factory.orchestrator_factory import OrchestratorFactory
-from src.factory.ml_orchestrator_factory import MLOrchestratorFactory
+import logging
+from src.ML.config.config import DatasetConfig, MLConfig
+from src.ML.factory.orchestrator_factory import OrchestratorFactory
+from src.ML.factory.ml_orchestrator_factory import MLOrchestratorFactory
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('ml_pipeline.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 def main():
     """Execute complete ML pipeline."""
+    logger.info("Starting ML Pipeline")
+    
     # Configuration
     dataset_config = DatasetConfig()
     ml_config = MLConfig()
@@ -14,6 +28,9 @@ def main():
     print("=" * 80)
     print("STEP 1: DATA PREPROCESSING")
     print("=" * 80)
+    logger.info("="*80)
+    logger.info("STEP 1: DATA PREPROCESSING")
+    logger.info("="*80)
     
     preprocessing_orchestrator = OrchestratorFactory.create(
         use_timeseries_split=dataset_config.use_timeseries_split,
@@ -51,6 +68,9 @@ def main():
     print(f"  Failure: {test_counts.get('Failure', 0)}")
 
     print(f"\nOverall total: {len(train_df) + len(test_df)} samples")
+    
+    logger.info(f"Train set: {len(train_df)} samples - {train_counts.to_dict()}")
+    logger.info(f"Test set: {len(test_df)} samples - {test_counts.to_dict()}")
 
     # Step 2: ML Training & Evaluation
     print("\n" + "=" * 80)
@@ -77,8 +97,9 @@ def main():
     print("\n" + "=" * 80)
     print("PIPELINE COMPLETED SUCCESSFULLY")
     print("=" * 80)
+    logger.info("Pipeline completed successfully")
+    logger.info(f"Final metrics: {metrics}")
 
 
 if __name__ == '__main__':
     main()
-
