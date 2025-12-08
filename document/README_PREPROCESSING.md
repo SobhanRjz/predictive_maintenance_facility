@@ -1,154 +1,307 @@
-# Motor Sensor Data Preprocessing - Professional ML Pipeline
+# Predictive Maintenance Data Preprocessing
 
-## Architecture Overview
+## Overview
 
-```
-src/
-├── core/              # Interfaces (DI pattern)
-├── loaders/           # Data loading with translation
-├── filters/           # Condition filtering
-├── splitters/         # Time-series splitting strategies
-├── exporters/         # Data export
-├── validators/        # Data quality checks
-├── orchestrator/      # Main pipeline orchestrator
-├── factory/           # Dependency injection factory
-├── config/            # Configuration management
-└── utils/             # File renaming & column translation
-```
+The preprocessing pipeline handles raw sensor data transformation for hierarchical classification, implementing automatic feature extraction and hierarchical labeling.
 
-## Key Features
+## Unified Config-Driven Pipeline
 
-### 1. **File & Column Translation**
-- Persian → English filenames
-- Persian → English column names
-- Automatic translation during loading
-
-### 2. **Time-Series Aware Splitting**
-
-#### Simple Time-Series Split:
-- Chronological train/test split
-- No shuffling (preserves temporal order)
-- Test set is contiguous suffix
-
-#### Stratified Time-Series Split:
-- **RECOMMENDED for your imbalanced data**
-- Maintains class distribution
-- Preserves temporal order
-- Window-based approach prevents data leakage
-
-**Configuration:**
-```python
-window_size = '10T'  # 10 minutes
-# For 1-minute interval data:
-# - '5T' = more granular
-# - '10T' = balanced (recommended)
-# - '30T' = coarser stratification
-```
-
-### 3. **Data Quality Validation**
-- Missing values detection
-- Duplicate timestamps check
-- Temporal gaps identification
-- Outlier detection (IQR method)
-- Numeric range validation
-
-### 4. **Class Imbalance Handling**
-Your data characteristics:
-- Normal: ~90%
-- Warning: ~8%
-- Failure: ~2%
-
-Stratified splitting ensures adequate representation of minority classes.
-
-## Usage
-
-### Basic Usage:
+### Single Script for All Training
 ```bash
-python main.py
+# Layer 1: Full preprocessing + training
+python main_ml_pipeline.py
+
+# Layer 2: Uses preprocessed data + filtering
+python main_ml_pipeline.py configs/model_configs/layer2_warning_classifier.yaml
 ```
 
-### Configuration:
-Edit `src/config/config.py`:
+## Data Flow Architecture
+
+### Layer 1: Complete Preprocessing Pipeline
+```
+Raw CSV Files (30sec intervals)
+    ↓
+MultiFileLoader
+├── Load CSV/Excel files
+├── Translate Persian → English (if needed)
+├── Resample: 30sec → 1min
+└── Add run_id column
+    ↓
+PreprocessingOrchestrator
+├── Filter normal/abnormal data
+├── TimeDomainFeatureExtractor (10min windows)
+│   ├── Statistical: mean, std, rms, peak-to-peak
+│   ├── Shape: skewness, kurtosis, crest factor
+│   └── Distribution: percentiles, variance
+├── Hierarchical Label Extractor
+│   ├── warning_type from filename
+│   └── failure_type from filename
+├── RunIdSplitter (prevents data leakage)
+├── DataValidator (quality checks)
+└── CSVExporter
+    ↓
+Processed Data (train.csv, test.csv)
+    ↓
+MLOrchestrator + XGBoost Training
+```
+
+### Layer 2: Filtered Training Pipeline
+```
+Preprocessed Data (train.csv, test.csv)
+    ↓
+DataFilter (health_status == "Warning")
+    ↓
+MLOrchestrator + XGBoost Training
+```
+
+## Configuration Structure
+
+### Layer 1 Config (Full Preprocessing)
+```yaml
+dataset:
+  datasets_dir: 'datasets\datasets_renamed'
+  output_dir: 'datasets\processed_data'
+  normal_files:
+    - 'normal_3months_30sec_interval-1.csv'
+  failure_files:
+    - 'failure_1_bearing_fault.csv'
+    # ... more files
+  warning_files:
+    - 'warning_1_radial_vibration_increase.csv'
+    # ... more files
+
+  # Preprocessing settings
+  resample_freq: "1min"        # 30sec → 1min
+  add_hierarchical_labels: true
+
+features:
+  window_size: "10min"         # Rolling window size
+  extract_features: true       # Enable feature extraction
+  timestamp_col: "timestamp"
+  exclude_cols: ["run_id"]     # Columns to exclude from features
+```
+
+### Layer 2 Config (Uses Processed Data)
+```yaml
+dataset:
+  output_dir: 'datasets\processed_data'  # Uses processed data
+  # No file lists needed
+
+features:
+  extract_features: false      # Features already extracted
+
+data_filter:                   # Filter to specific samples
+  column: "health_status"
+  operator: "=="
+  value: "Warning"
+```
+
+## Feature Extraction Details
+
+### Time-Domain Features (10-minute windows)
+- **Basic Statistics**: mean, std, min, max, rms, peak-to-peak
+- **Shape Features**: skewness, kurtosis, crest factor
+- **Distribution**: percentiles (25%, 50%, 75%), variance
+- **Advanced**: zero crossings, peak count, energy
+
+### Rolling Window Implementation
 ```python
-datasets_dir = 'datasets/datasets_renamed'
-output_dir = 'datasets/processed_data'
-test_size = 0.2  # 20% for test
-use_timeseries_split = True
-use_stratification = True  # Recommended for imbalanced data
-window_size = '10T'  # 10-minute windows
+# 10-minute windows on 1-minute data = 10 samples per window
+window_size = "10min"
+features_per_sensor = 15+  # Statistical features
+total_features = features_per_sensor × num_sensors
 ```
 
-## Output
+## Hierarchical Labeling System
 
-### Files Generated:
+### Automatic Label Extraction
+Labels extracted from filenames during preprocessing:
+
 ```
-datasets/processed_data/
-├── train.csv                 # Training dataset
-├── test.csv                  # Test dataset
-└── validation_report.json    # Data quality report
+warning_1_radial_vibration_increase.csv → warning_type: "radial_vibration_increase"
+failure_2_shaft_misalignment.csv → failure_type: "shaft_misalignment"
 ```
 
-### Validation Report Includes:
-- Total rows processed
-- Missing values count
+### Warning Types (15 classes)
+- `radial_vibration_increase`
+- `axial_vibration_increase`
+- `bearing_temp_increase`
+- `oil_temp_increase`
+- `casing_temp_increase`
+- `suction_pressure_drop`
+- `discharge_pressure_drop`
+- `flow_rate_decrease`
+- `power_increase`
+- `current_increase`
+- `voltage_drop`
+- `acoustic_noise_increase`
+- `outlet_fluid_temp_increase`
+- `flow_pressure_power_fluctuation`
+- `bearing_vibration_temp_increase`
+
+### Failure Types (9 classes)
+- `bearing_fault`
+- `shaft_misalignment`
+- `rotor_imbalance`
+- `cavitation`
+- `pipe_blockage`
+- `motor_overload`
+- `seal_failure`
+- `impeller_wear`
+
+## Data Splitting Strategy
+
+### Run-Based Splitting (Recommended)
+- **Purpose**: Prevents data leakage between train/test
+- **Method**: Split by `run_id` (each CSV file = 1 run)
+- **Benefits**:
+  - Maintains temporal sequences within runs
+  - No future data in training set
+  - Realistic evaluation scenario
+
+### Configuration
+```yaml
+dataset:
+  use_timeseries_split: false    # Use run-based splitting
+  use_stratification: false      # No stratification needed
+  test_size: 0.2                # 20% test set
+```
+
+## Data Quality Validation
+
+### Automatic Checks
+- Missing values detection
 - Duplicate timestamps
-- Temporal gaps
-- Outliers per column
-- Class distribution
+- Outlier detection
+- Data type consistency
+- Column completeness
 
-## Column Names (English)
+### Validation Reports
+```json
+{
+  "missing_values": {"column": "sensor_1", "count": 5},
+  "duplicate_timestamps": 0,
+  "outliers_detected": 12,
+  "data_types_valid": true
+}
+```
 
-| Persian                    | English                    |
-|----------------------------|----------------------------|
-| زمان                       | timestamp                  |
-| شتاب‌سنج (g)               | accelerometer_g            |
-| سرعت لرزش (mm/s)          | vibration_velocity_mm_s    |
-| جابجایی محور (µm)          | shaft_displacement_um      |
-| دمای یاتاقان (°C)          | bearing_temp_c             |
-| دمای روغن (°C)             | oil_temp_c                 |
-| دمای پوسته (°C)            | casing_temp_c              |
-| دمای سیال ورودی (°C)       | inlet_fluid_temp_c         |
-| دمای سیال خروجی (°C)       | outlet_fluid_temp_c        |
-| فشار ورودی (bar)           | inlet_pressure_bar         |
-| فشار خروجی (bar)           | outlet_pressure_bar        |
-| دبی جریان (m³/h)           | flow_rate_m3_h             |
-| جریان موتور (A)            | motor_current_a            |
-| ولتاژ تغذیه (V)            | supply_voltage_v           |
-| توان مصرفی (kW)            | power_consumption_kw       |
-| شدت صوت (dB)               | sound_intensity_db         |
-| وضعیت سلامت                | health_status              |
+## Memory & Performance Optimization
 
-## Best Practices for Time-Series ML
+### Streaming Processing
+- Large CSV files processed in chunks
+- Feature extraction batched by time windows
+- Memory-efficient pandas operations
 
-### ✅ DO:
-1. Use time-series aware splitting
-2. Keep temporal order intact
-3. Validate data quality before training
-4. Handle class imbalance
-5. Use stratification for minority classes
+### Parallel Processing
+- Multiple files loaded concurrently
+- Feature extraction parallelized
+- GPU acceleration for XGBoost (optional)
 
-### ❌ DON'T:
-1. Shuffle time-series data
-2. Mix train/test windows
-3. Ignore data quality issues
-4. Ignore class imbalance
-5. Use future data in training
+## Usage Examples
 
-## Why Stratified Time-Series Split?
+### Process & Train Layer 1
+```bash
+python main_ml_pipeline.py
+```
 
-For motor predictive maintenance:
-1. **Temporal Pattern**: Normal → Warning → Failure
-2. **Class Imbalance**: Failures are rare (2%)
-3. **Real-World**: Test on recent data (simulates production)
-4. **No Leakage**: Entire windows to train/test
-5. **Balanced Evaluation**: Ensures all classes in test set
+**Creates**:
+- `datasets/processed_data/train.csv` (with features + labels)
+- `datasets/processed_data/test.csv`
+- `models/layer1_anomaly_detection.pkl`
 
-## Next Steps
+### Train Layer 2 Classifiers
+```bash
+# Warning classifier
+python main_ml_pipeline.py configs/model_configs/layer2_warning_classifier.yaml
 
-After preprocessing:
-1. Feature engineering (rolling statistics, FFT, etc.)
-2. Model selection (LSTM, Random Forest, XGBoost)
-3. Handle class imbalance in training (SMOTE, class weights)
-4. Hyperparameter tuning
-5. Cross-validation (time-series CV)
+# Failure classifier
+python main_ml_pipeline.py configs/model_configs/layer2_failure_classifier.yaml
+```
 
+## Configuration Customization
+
+### Change Window Size
+```yaml
+features:
+  window_size: "5min"    # More granular (5min windows)
+  # or "15min"          # Coarser (15min windows)
+```
+
+### Add New Sensors
+```yaml
+# Automatically detected from CSV columns
+# No config changes needed
+```
+
+### Modify Feature Set
+```python
+# Extend TimeDomainFeatureExtractor class
+def extract_additional_features(self, df):
+    # Add custom features
+    df['custom_feature'] = df['sensor_1'] * df['sensor_2']
+    return df
+```
+
+### Custom Resampling
+```yaml
+dataset:
+  resample_freq: "30sec"    # Keep original sampling
+  # or "2min"              # Coarser sampling
+```
+
+## Output Data Format
+
+### Processed CSV Structure
+```
+timestamp,run_id,health_status,warning_type,failure_type,
+sensor1_mean,sensor1_std,sensor1_rms,...,
+sensor2_mean,sensor2_std,sensor2_rms,...,
+...
+```
+
+- **timestamp**: Datetime index
+- **run_id**: File identifier (prevents leakage)
+- **health_status**: Normal/Warning/Failure
+- **warning_type**: Specific warning class (if Warning)
+- **failure_type**: Specific failure class (if Failure)
+- **Features**: Time-domain features per sensor
+
+## Troubleshooting
+
+### Memory Issues
+- Reduce window size: `window_size: "5min"`
+- Increase batch size in feature extraction
+- Use data sampling for development
+
+### Slow Processing
+- Enable parallel processing in config
+- Use coarser resampling: `resample_freq: "2min"`
+- Reduce feature set complexity
+
+### Label Extraction Issues
+- Check filename format matches expected patterns
+- Verify Persian→English translation working
+- Review label extraction logic in `label_extractor.py`
+
+### Data Quality Issues
+- Check validation reports in logs
+- Handle missing values appropriately
+- Review outlier detection thresholds
+
+## Extensibility
+
+### Add New Feature Types
+1. Implement `IFeatureExtractor` interface
+2. Add to `OrchestratorFactory.create()`
+3. Update config: `feature_types: ["time_domain", "frequency"]`
+
+### Custom Labeling
+1. Extend `LabelExtractor` class
+2. Add filename pattern matching
+3. Update config target classes
+
+### New Data Sources
+1. Implement `IDataLoader` interface
+2. Add to `MultiFileLoader`
+3. Update file format detection
