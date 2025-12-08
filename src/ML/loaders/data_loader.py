@@ -112,8 +112,15 @@ class MultiFileLoader:
                 df = self._resampler.resample(df)
         return df
 
-    def load_multiple(self, paths: list[str], start_run_id: int = 1) -> pd.DataFrame:
-        """Load multiple files with sequential run_id assignment."""
+    def load_multiple(self, paths: list[str], start_run_id: int = 1, add_hierarchical_labels: bool = False) -> pd.DataFrame:
+        """
+        Load multiple files with sequential run_id assignment.
+        
+        Args:
+            paths: List of file paths
+            start_run_id: Starting run_id value
+            add_hierarchical_labels: If True, add warning_type and failure_type columns
+        """
         if not paths:
             return pd.DataFrame()
 
@@ -121,7 +128,12 @@ class MultiFileLoader:
         current_run_id = start_run_id
         for path in paths:
             df = self._load_single(path)
-            df['run_id'] = current_run_id  # Add run_id column
+            df['run_id'] = current_run_id
+            
+            if add_hierarchical_labels:
+                from src.ML.utils.label_extractor import LabelExtractor
+                df = LabelExtractor.add_hierarchical_labels(df, path)
+            
             dfs_with_run_ids.append(df)
             current_run_id += 1
 
