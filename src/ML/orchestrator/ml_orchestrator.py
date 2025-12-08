@@ -42,65 +42,28 @@ class MLOrchestrator:
         Returns:
             Dictionary with evaluation metrics
         """
-        logger.info("="*80)
-        logger.info("ML TRAINING & EVALUATION")
-        logger.info("="*80)
-        
         # Features already extracted in preprocessing step
-        logger.info(f"Training data shape: {train_df.shape}")
-        logger.info(f"Test data shape: {test_df.shape}")
-        print(f"Training data shape: {train_df.shape}")
-        print(f"Test data shape: {test_df.shape}")
-        
-        # Check for run_id overlap (data leakage detection)
-        if 'run_id' in train_df.columns and 'run_id' in test_df.columns:
-            train_runs = set(train_df['run_id'].unique())
-            test_runs = set(test_df['run_id'].unique())
-            overlap = train_runs.intersection(test_runs)
-            
-            if overlap:
-                logger.error(f"⚠️ DATA LEAKAGE DETECTED: {len(overlap)} run_ids in both train and test!")
-                logger.error(f"Overlapping run_ids: {sorted(overlap)}")
-                print(f"\n⚠️ WARNING: DATA LEAKAGE! {len(overlap)} run_ids appear in both train and test")
-                print(f"Overlapping run_ids: {sorted(overlap)}")
-            else:
-                logger.info(f"✓ No data leakage: train and test run_ids are separate")
-                print(f"✓ No data leakage: {len(train_runs)} train run_ids, {len(test_runs)} test run_ids (no overlap)")
-        
-        # Prepare training data
         X_train, y_train, feature_names = self._prepare_data(train_df)
         X_test, y_test, _ = self._prepare_data(test_df)
 
-        logger.info(f"Features: {len(feature_names)} columns")
-        logger.info(f"Feature names (first 10): {feature_names[:10]}")
-        
         # Set feature names in model for consistent inference
         self._model.set_feature_names(feature_names)
-        
-        print(f"\nTraining model on {X_train.shape[0]} samples with {X_train.shape[1]} features...")
-        logger.info(f"Training on {X_train.shape[0]} samples with {X_train.shape[1]} features")
+
+        print(f"Training model on {X_train.shape[0]} samples with {X_train.shape[1]} features...")
         self._model.train(X_train, y_train)
-        
-        print("\nEvaluating model...")
-        logger.info("Evaluating model on test set...")
+
+        print("Evaluating model...")
         metrics = self._model.evaluate(X_test, y_test)
-        
+
         print(f"\nModel Performance:")
         print(f"  Accuracy: {metrics['accuracy']:.4f}")
         print(f"  Precision: {metrics['precision']:.4f}")
         print(f"  Recall: {metrics['recall']:.4f}")
         print(f"  F1-Score: {metrics['f1_score']:.4f}")
         print(f"\nClassification Report:\n{metrics['classification_report']}")
-        
-        logger.info(f"Test Accuracy: {metrics['accuracy']:.4f}")
-        logger.info(f"Test Precision: {metrics['precision']:.4f}")
-        logger.info(f"Test Recall: {metrics['recall']:.4f}")
-        logger.info(f"Test F1-Score: {metrics['f1_score']:.4f}")
-        logger.info(f"\nClassification Report:\n{metrics['classification_report']}")
-        
+
         if model_save_path:
-            print(f"\nSaving model to {model_save_path}...")
-            logger.info(f"Saving model to {model_save_path}")
+            print(f"Saving model to {model_save_path}...")
             self._model.save(model_save_path)
         
         return metrics
