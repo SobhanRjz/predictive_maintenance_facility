@@ -1,13 +1,16 @@
 """Main script for complete ML pipeline: preprocessing + training."""
 import logging
-from src.ML.config.config import DatasetConfig, MLConfig
+import sys
+from pathlib import Path
+from src.ML.config.config_loader import ConfigLoader, ModelConfig
 from src.ML.factory.orchestrator_factory import OrchestratorFactory
-from src.ML.factory.ml_orchestrator_factory import MLOrchestratorFactory
+from src.ML.factory.model_factory import ModelFactory
+from src.ML.orchestrator.ml_orchestrator import MLOrchestrator
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.WARNING,  # Only show warnings and errors
+    format='%(levelname)s: %(message)s',
     handlers=[
         logging.FileHandler('ml_pipeline.log'),
         logging.StreamHandler()
@@ -17,28 +20,32 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    """Execute complete ML pipeline."""
-    logger.info("Starting ML Pipeline")
-    
-    # Configuration
-    dataset_config = DatasetConfig()
-    ml_config = MLConfig()
-    
-    # Step 1: Data Preprocessing
-    print("=" * 80)
-    print("STEP 1: DATA PREPROCESSING")
-    print("=" * 80)
-    logger.info("="*80)
-    logger.info("STEP 1: DATA PREPROCESSING")
-    logger.info("="*80)
+    """Execute complete ML pipeline from layer config."""
+    # Load configuration from layer config YAML
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/model_configs/layer1_anomaly_detection.yaml"
+
+    if not Path(config_path).exists():
+        print(f"Error: Configuration file not found: {config_path}")
+        print("\nUsage: python main_ml_pipeline.py [config_path]")
+        print("Default: python main_ml_pipeline.py configs/model_configs/layer1_anomaly_detection.yaml")
+        sys.exit(1)
+
+    print(f"Loading configuration from: {config_path}")
+
+    config: ModelConfig = ConfigLoader.load(config_path)
+    dataset_config = config.dataset
+    features_config = config.features
     
     preprocessing_orchestrator = OrchestratorFactory.create(
         use_timeseries_split=dataset_config.use_timeseries_split,
         use_stratification=dataset_config.use_stratification,
-        window_size=dataset_config.window_size,
+        window_size=features_config.window_size,
         resample_freq=dataset_config.resample_freq,
         resample_method=dataset_config.resample_method,
-        extract_features=True  # Extract features before splitting
+        extract_features=features_config.extract_features,
+        timestamp_col=features_config.timestamp_col,
+        target_col=config.target.column,
+        exclude_cols=features_config.exclude_cols
     )
     
     train_df, test_df, validation_report = preprocessing_orchestrator.process(
@@ -46,59 +53,54 @@ def main():
         abnormal_paths=dataset_config.get_abnormal_paths(),
         output_dir=dataset_config.output_dir,
         test_size=dataset_config.test_size,
-        random_state=dataset_config.random_state
+        random_state=dataset_config.random_state,
+        add_hierarchical_labels=dataset_config.add_hierarchical_labels
     )
 
     # Print class distribution statistics
-    print("\n" + "=" * 80)
-    print("DATASET STATISTICS")
-    print("=" * 80)
+    train_counts = train_df[config.target.column].value_counts()
+    test_counts = test_df[config.target.column].value_counts()
 
-    train_counts = train_df['health_status'].value_counts()
-    test_counts = test_df['health_status'].value_counts()
-
-    print(f"Train set total: {len(train_df)} samples")
-    print(f"  Normal: {train_counts.get('Normal', 0)}")
-    print(f"  Warning: {train_counts.get('Warning', 0)}")
-    print(f"  Failure: {train_counts.get('Failure', 0)}")
-
-    print(f"\nTest set total: {len(test_df)} samples")
-    print(f"  Normal: {test_counts.get('Normal', 0)}")
-    print(f"  Warning: {test_counts.get('Warning', 0)}")
-    print(f"  Failure: {test_counts.get('Failure', 0)}")
-
-    print(f"\nOverall total: {len(train_df) + len(test_df)} samples")
-    
-    logger.info(f"Train set: {len(train_df)} samples - {train_counts.to_dict()}")
-    logger.info(f"Test set: {len(test_df)} samples - {test_counts.to_dict()}")
+    print(f"Dataset: {len(train_df)} train, {len(test_df)} test samples")
 
     # Step 2: ML Training & Evaluation
-    print("\n" + "=" * 80)
-    print("STEP 2: ML TRAINING & EVALUATION")
-    print("=" * 80)
+    print("\nTraining model...")
     
-    ml_orchestrator = MLOrchestratorFactory.create(
-        feature_window_size=ml_config.feature_window_size,
-        n_estimators=ml_config.n_estimators,
-        max_depth=ml_config.max_depth,
-        learning_rate=ml_config.learning_rate,
-        target_col=ml_config.target_col,
-        random_state=ml_config.random_state,
-        early_stopping_rounds=ml_config.early_stopping_rounds
+    # Create model from config
+    model = ModelFactory.create(config)
+    
+    # Create orchestrator
+    ml_orchestrator = MLOrchestrator(
+        model=model,
+        target_col=config.target.column
     )
     
-    model_path = f"{ml_config.model_output_dir}/xgboost_model.pkl"
+    model_path = config.output.model_path
+    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+    
     metrics = ml_orchestrator.train_and_evaluate(
         train_df=train_df,
         test_df=test_df,
         model_save_path=model_path
     )
     
-    print("\n" + "=" * 80)
-    print("PIPELINE COMPLETED SUCCESSFULLY")
-    print("=" * 80)
+    # Save metrics
+    import json
+    metrics_path = config.output.metrics_path
+    Path(metrics_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    metrics_serializable = {
+        k: v for k, v in metrics.items() 
+        if k != 'classification_report'
+    }
+    metrics_serializable['classification_report_text'] = metrics['classification_report']
+    
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics_serializable, f, indent=2)
+    
+    print(f"Model saved: {model_path}")
+    print(f"Metrics saved: {metrics_path}")
     logger.info("Pipeline completed successfully")
-    logger.info(f"Final metrics: {metrics}")
 
 
 if __name__ == '__main__':
