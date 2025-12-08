@@ -33,7 +33,8 @@ class PreprocessingOrchestrator:
         abnormal_paths: list[str],
         output_dir: str,
         test_size: float = 0.2,
-        random_state: int = 42
+        random_state: int = 42,
+        add_hierarchical_labels: bool = True
     ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Execute full preprocessing pipeline.
@@ -44,45 +45,51 @@ class PreprocessingOrchestrator:
             output_dir: Directory for output files
             test_size: Proportion for test set
             random_state: Random seed for reproducibility
+            add_hierarchical_labels: Add warning_type and failure_type columns
             
         Returns:
             Tuple of (train_df, test_df, validation_report)
         """
-        print("Loading normal condition data...")
-        normal_df = self._loader.load_multiple(normal_paths, start_run_id=1)
-        normal_df = self._normal_filter.filter(normal_df)
-        print(f"Normal data loaded: {len(normal_df)} rows")
+        if len(normal_paths) > 0:
+            normal_df = self._loader.load_multiple(
+                normal_paths,
+                start_run_id=1,
+                add_hierarchical_labels=add_hierarchical_labels
+            )
+            normal_df = self._normal_filter.filter(normal_df)
+        else:
+            normal_df = pd.DataFrame()
 
-        print("\nLoading failure/warning data...")
-        next_run_id = len(normal_paths) + 1
-        abnormal_df = self._loader.load_multiple(abnormal_paths, start_run_id=next_run_id)
-        # abnormal_df = self._abnormal_filter.filter(abnormal_df)
-        print(f"Abnormal data loaded: {len(abnormal_df)} rows")
-        
+        next_run_id = len(normal_df) + 1
+        if len(abnormal_paths) > 0:
+            abnormal_df = self._loader.load_multiple(
+                abnormal_paths,
+                start_run_id=next_run_id,
+                add_hierarchical_labels=add_hierarchical_labels
+            )
+            abnormal_df = self._abnormal_filter.filter(abnormal_df)
+        else:
+            abnormal_df = pd.DataFrame()
+
         # Combine datasets
-        print("\nCombining datasets...")
         combined_df = pd.concat([normal_df, abnormal_df], ignore_index=True)
-        
+
         # Validate data quality
-        print("\nValidating data quality...")
         is_valid, validation_report = self._validator.validate(combined_df)
-        print(f"Data validation: {'PASSED' if is_valid else 'WARNINGS DETECTED'}")
-        
+
         # Extract features BEFORE splitting (correct ML pipeline order)
         if self._feature_extractor:
-            print("\nExtracting features from combined data...")
-            combined_df = self._feature_extractor.extract(combined_df)
-            print(f"Features extracted: {combined_df.shape}")
-        
-        
+            combined_df0 = self._feature_extractor.extract(combined_df)
+            if 'health_status' not in combined_df0.columns:
+                combined_df0['health_status'] = combined_df['health_status']
+            combined_df = combined_df0
+
         # Split data
-        print("\nSplitting data...")
         train_df, test_df = self._splitter.split(combined_df, test_size, random_state)
         train_df = train_df.sample(frac=1, random_state=random_state).reset_index(drop=True)
         test_df = test_df.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
         # Export
-        print(f"\nExporting to {output_dir}...")
         self._exporter.export(train_df, test_df, output_dir)
         
         return train_df, test_df, validation_report
