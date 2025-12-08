@@ -18,20 +18,29 @@ class OrchestratorFactory:
         window_size: str = '10min',
         resample_freq: str = '1T',
         resample_method: str = 'mean',
-        extract_features: bool = True
+        extract_features: bool = True,
+        timestamp_col: str = 'timestamp',
+        target_col: str = 'health_status',
+        exclude_cols: list[str] = None
     ) -> PreprocessingOrchestrator:
         """
-        Create orchestrator with dependencies.
+        Create orchestrator with dependencies from config.
 
         Args:
             use_timeseries_split: If True, uses chronological split
             use_stratification: If True with use_timeseries_split, uses stratified time-series split
-            window_size: Window size for feature extraction and splitting (e.g., '10min', '1H')
-            resample_freq: Resampling frequency (e.g., '1T' for 1 minute)
-            resample_method: Resampling aggregation method ('mean', 'max', 'min', 'first', 'last')
-            extract_features: If True, extract features before splitting (recommended)
+            window_size: Window size for feature extraction (from config)
+            resample_freq: Resampling frequency (from config)
+            resample_method: Resampling aggregation method (from config)
+            extract_features: If True, extract features before splitting (from config)
+            timestamp_col: Timestamp column name (from config)
+            target_col: Target column name (from config)
+            exclude_cols: Columns to exclude from feature extraction (from config)
         """
-        # Create resampler for 30sec -> 1min aggregation
+        if exclude_cols is None:
+            exclude_cols = ['run_id']
+        
+        # Create resampler
         resampler = DataResampler(freq=resample_freq, agg_method=resample_method)
 
         csv_loader = CSVLoader()
@@ -42,15 +51,14 @@ class OrchestratorFactory:
         abnormal_filter = ExcludeNormalFilter()
 
         # Use run_id based splitting for proper train/test separation by CSV file
-        
         splitter = RunIdSplitter()
         
         # Feature extractor (applied before splitting)
         feature_extractor = TimeDomainFeatureExtractor(
             window_size=window_size,
-            timestamp_col='timestamp',
-            target_col='health_status',
-            exclude_cols=['run_id']
+            timestamp_col=timestamp_col,
+            target_col=target_col,
+            exclude_cols=exclude_cols
         ) if extract_features else None
         
         exporter = CSVExporter()
