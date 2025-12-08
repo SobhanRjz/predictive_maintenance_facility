@@ -20,7 +20,8 @@ class XGBoostModel(IModel):
         target_col: str = 'health_status',
         random_state: int = 42,
         early_stopping_rounds: int = None,
-        eval_metric: str = 'mlogloss'
+        eval_metric: str = 'mlogloss',
+        scale_pos_weight: list = None
     ):
         """
         Args:
@@ -31,19 +32,23 @@ class XGBoostModel(IModel):
             random_state: Random seed
             early_stopping_rounds: Early stopping rounds (None to disable)
             eval_metric: Evaluation metric for early stopping
+            scale_pos_weight: Class weights (None for auto-compute)
         """
         self._target_col = target_col
         self._early_stopping_rounds = early_stopping_rounds
         self._eval_metric = eval_metric
 
-        self._model = XGBClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            random_state=random_state,
-            eval_metric=eval_metric,
-            scale_pos_weight=[1, 28, 62]
-        )
+        xgb_params = {
+            'n_estimators': n_estimators,
+            'max_depth': max_depth,
+            'learning_rate': learning_rate,
+            'random_state': random_state,
+            'eval_metric': eval_metric
+        }
+        if scale_pos_weight is not None:
+            xgb_params['scale_pos_weight'] = scale_pos_weight
+        
+        self._model = XGBClassifier(**xgb_params)
         self._label_encoder = LabelEncoder()
         self._is_fitted = False
         self._feature_names = None
