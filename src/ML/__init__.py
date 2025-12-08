@@ -1,5 +1,5 @@
 """ML package for machine learning components."""
 
-from .inference import MLInference
+from src.ML.inference.hierarchical_predictor import HierarchicalPredictor
 
-__all__ = ["MLInference"]
+__all__ = ["HierarchicalPredictor"]
