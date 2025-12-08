@@ -1,0 +1,89 @@
+model:
+  name: "layer2_warning_classifier"
+  type: "xgboost"
+  task: "classification"
+  description: "Secondary layer: Classify warning types"
+  
+  # Training configuration
+  hyperparameters:
+    n_estimators: 800
+    max_depth: 7
+    learning_rate: 0.05
+    random_state: 42
+    early_stopping_rounds: 80
+    eval_metric: "mlogloss"
+  
+  # Target configuration
+  target:
+    column: "warning_type"
+    classes:
+      - "radial_vibration_increase"
+      - "axial_vibration_increase"
+      - "bearing_temp_increase"
+      - "oil_temp_increase"
+      - "casing_temp_increase"
+      - "suction_pressure_drop"
+      - "discharge_pressure_drop"
+      - "flow_rate_decrease"
+      - "power_increase"
+      - "current_increase"
+      - "voltage_drop"
+      - "acoustic_noise_increase"
+      - "outlet_fluid_temp_increase"
+      - "flow_pressure_power_fluctuation"
+      - "bearing_vibration_temp_increase"
+    type: "multiclass"
+  
+  # Data filtering: only train on Warning samples
+  data_filter:
+    column: "health_status"
+    operator: "=="
+    value: "Warning"
+  
+  # Feature configuration
+  features:
+    window_size: "10min"
+    extract_features: true
+    feature_types: ["time_domain"]
+    timestamp_col: "timestamp"
+    exclude_cols: ["run_id","health_status"]
+  
+  # Dataset configuration (uses preprocessed data from Layer 1)
+  dataset:
+    datasets_dir: 'datasets\datasets_renamed'
+    output_dir: 'datasets\processed_data'
+    use_timeseries_split: false
+    use_stratification: true
+    test_size: 0.2
+    validation_size: null
+    random_state: 42
+    resample_freq: "1min"
+    resample_method: "mean"
+    add_hierarchical_labels: true
+    
+    # Data files
+    normal_files:
+    failure_files:
+    warning_files:
+      - 'warning_1_radial_vibration_increase.csv'
+      - 'warning_2_axial_vibration_increase.csv'
+      - 'warning_3_bearing_temp_increase.csv'
+      - 'warning_4_oil_temp_increase.csv'
+      - 'warning_5_casing_temp_increase.csv'
+      - 'warning_6_suction_pressure_drop.csv'
+      - 'warning_7_discharge_pressure_drop.csv'
+      - 'warning_8_flow_rate_decrease.csv'
+      - 'warning_9_power_increase.csv'
+      - 'warning_10_current_increase.csv'
+      - 'warning_11_voltage_drop.csv'
+      - 'warning_12_acoustic_noise_increase.csv'
+      - 'warning_13_outlet_fluid_temp_increase.csv'
+      - 'warning_14_flow_pressure_power_fluctuation.csv'
+      - 'warning_15_bearing_vibration_temp_increase.csv'
+  
+  
+  # Output configuration
+  output:
+    model_path: "models/layer2_warning_classifier.pkl"
+    metrics_path: "outputs/metrics/layer2_warning_classifier.json"
+    predictions_path: "outputs/predictions/layer2_warning_predictions.csv"

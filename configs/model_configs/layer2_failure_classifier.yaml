@@ -1,0 +1,79 @@
+model:
+  name: "layer2_failure_classifier"
+  type: "xgboost"
+  task: "classification"
+  description: "Secondary layer: Classify failure types"
+  
+  # Training configuration
+  hyperparameters:
+    n_estimators: 800
+    max_depth: 7
+    learning_rate: 0.05
+    random_state: 42
+    early_stopping_rounds: 80
+    eval_metric: "mlogloss"
+  
+  # Target configuration
+  target:
+    column: "failure_type"
+    classes:
+      - "bearing_fault"
+      - "shaft_misalignment"
+      - "rotor_imbalance"
+      - "cavitation"
+      - "pipe_blockage"
+      - "motor_overload"
+      - "voltage_drop"
+      - "seal_failure"
+      - "impeller_wear"
+    type: "multiclass"
+  
+  # Data filtering: only train on Failure samples
+  data_filter:
+    column: "health_status"
+    operator: "=="
+    value: "Failure"
+  
+  # Feature configuration
+  features:
+    window_size: "10min"
+    extract_features: true
+    feature_types: ["time_domain"]
+    timestamp_col: "timestamp"
+    exclude_cols: ["run_id","health_status"]
+  
+  # Dataset configuration (uses preprocessed data from Layer 1)
+  dataset:
+    datasets_dir: 'datasets\datasets_renamed'
+    output_dir: 'datasets\processed_data'
+    use_timeseries_split: false
+    use_stratification: true
+    test_size: 0.2
+    validation_size: null
+    random_state: 42
+    resample_freq: "1min"
+    resample_method: "mean"
+    add_hierarchical_labels: true
+    
+    # Data files
+    normal_files:
+    
+    failure_files:
+      - 'failure_1_bearing_fault.csv'
+      - 'failure_2_shaft_misalignment.csv'
+      - 'failure_3_rotor_imbalance.csv'
+      - 'failure_4_cavitation.csv'
+      - 'failure_5_pipe_blockage.csv'
+      - 'failure_6_motor_overload.csv'
+      - 'failure_7_voltage_drop.csv'
+      - 'failure_8_seal_failure.csv'
+      - 'failure_9_impeller_wear.csv'
+    
+    warning_files:
+  
+  
+  # Output configuration
+  output:
+    model_path: "models/layer2_failure_classifier.pkl"
+    metrics_path: "outputs/metrics/layer2_failure_classifier.json"
+    predictions_path: "outputs/predictions/layer2_failure_predictions.csv"
