@@ -1,96 +1,208 @@
-# Time-Series Splitting Strategy Analysis
+# Data Splitting Strategy in Unified Pipeline
 
-## Your Data Characteristics
+## Overview
 
-Based on analysis of your datasets:
+The unified config-driven pipeline uses run-based splitting to prevent data leakage while maintaining temporal relationships and enabling realistic model evaluation.
 
-### Dataset Properties:
-- **Time Intervals**: 1-minute intervals consistently
-- **Duration**: ~90 days (3 months) per file
-- **Total Rows**: 129,600 rows per file
-- **Class Distribution** (e.g., failure_1_bearing_fault):
+## Current Implementation
+
+### Run-Based Splitting (Default)
+
+**Strategy**: Split by `run_id` instead of time windows
+
+```
+File 1: normal_3months.csv (run_id=1) → Train
+File 2: warning_1_vibration.csv (run_id=2) → Train
+File 3: warning_2_temperature.csv (run_id=3) → Test
+File 4: failure_1_bearing.csv (run_id=4) → Test
+```
+
+### Why Run-Based Splitting?
+
+1. **Prevents Data Leakage**: Each file represents a complete operational run
+2. **Maintains Temporal Sequences**: Within each run, time order is preserved
+3. **Realistic Evaluation**: Models tested on complete unseen operational scenarios
+4. **Handles Imbalanced Data**: Natural class distribution per run
+
+## Configuration
+
+### Layer 1 Config (Full Pipeline)
+```yaml
+dataset:
+  use_timeseries_split: false    # Use run-based splitting
+  use_stratification: false      # No additional stratification needed
+  test_size: 0.2                # 20% of runs go to test set
+
+  # File lists determine run order
+  normal_files: ['normal_3months_30sec_interval-1.csv']      # run_id=1
+  failure_files: ['failure_1_bearing_fault.csv', ...]        # run_id=2,3,...
+  warning_files: ['warning_1_radial_vibration.csv', ...]     # run_id=...,n
+```
+
+### Implementation Details
+
+```python
+class RunIdSplitter:
+    """Splits data by run_id to prevent leakage between operational runs."""
+
+    def split(self, df, test_size=0.2, random_state=42):
+        # Get unique run_ids
+        run_ids = sorted(df['run_id'].unique())
+
+        # Split run_ids (not individual rows)
+        n_test = max(1, int(len(run_ids) * test_size))
+        test_run_ids = run_ids[-n_test:]  # Most recent runs for testing
+
+        # Split dataframe by run_id
+        train_mask = ~df['run_id'].isin(test_run_ids)
+        test_mask = df['run_id'].isin(test_run_ids)
+
+        return df[train_mask], df[test_mask]
+```
+
+## Data Characteristics Analysis
+
+### Your Dataset Properties
+- **Time Intervals**: 1-minute intervals (after resampling)
+- **Duration**: ~90 days (3 months) per file/run
+- **Total Rows**: ~129,600 rows per file
+- **Class Distribution** (example per run):
   - Normal: 116,640 (90%)
   - Warning: 10,080 (7.8%)
   - Failure: 2,880 (2.2%)
 
-### Class Imbalance Issue:
-- **Normal**: ~90% of data
-- **Warning**: ~8% of data  
-- **Failure**: ~2% of data (highly imbalanced)
+### Class Imbalance Handling
 
-## Your Stratified Time-Series Splitter - EVALUATION
+1. **XGBoost Class Balancing**:
+   ```yaml
+   hyperparameters:
+     scale_pos_weight: [1, 28, 62]  # Balances Normal:Warning:Failure
+   ```
 
-### ✅ STRENGTHS:
+2. **Stratified Sampling for Layer 2**:
+   ```yaml
+   dataset:
+     use_stratification: true  # For warning/failure classifiers
+   ```
 
-1. **Temporal Order Preserved**: Test set is contiguous suffix in time - CORRECT
-2. **No Data Leakage**: Entire windows go to train/test - GOOD
-3. **Class-Aware**: Tries to maintain class distribution - IMPORTANT for your imbalanced data
-4. **Window-Based**: Works on time windows, not individual rows - APPROPRIATE
+## Alternative Splitting Strategies
 
-### ⚠️ POTENTIAL ISSUES:
-
-1. **Window Size Selection** (`1H` default):
-   - Your data: 1-minute intervals
-   - 1 hour window = 60 samples per window
-   - With 2.2% failure rate, many windows may have 0 failures
-   - **RECOMMENDATION**: Use smaller windows like `'5T'` or `'10T'` (5-10 minutes)
-
-2. **Backwards Accumulation**:
-   - Good: Uses most recent data for testing (realistic for production)
-   - Risk: If failures cluster at end, may over-represent in test set
-   - For your data: This is actually **GOOD** since failures typically occur after warnings
-
-3. **Stopping Condition**:
-   - Stops when target counts met **AND** minimum rows reached
-   - Risk: May take too many windows if failure class is sparse
-   - **SOLUTION**: Already handled with `max(1, int(cnt * test_size))`
-
-## RECOMMENDATION
-
-### ✅ YES, Use StratifiedTimeSeriesSplitter for your data
-
-**Reasons:**
-1. You have **severe class imbalance** (90% normal, 2% failure)
-2. Time-series nature requires temporal ordering
-3. Motor failures typically follow a pattern: Normal → Warning → Failure
-4. Testing on recent data simulates real-world deployment
-
-### Suggested Configuration:
-
-```python
-# For 1-minute interval data with imbalance
-splitter = StratifiedTimeSeriesSplitter(
-    timestamp_col="timestamp",
-    stratify_col="health_status",
-    window_size="10T"  # 10 minutes = 10 samples per window
-)
+### Time-Series Window Splitting (Available)
+```yaml
+dataset:
+  use_timeseries_split: true
+  use_stratification: true
+  window_size: '10min'  # Rolling window size
 ```
 
-**Why 10T?**
-- 10 minutes = 10 rows per window
-- With 2.2% failure rate: ~0.22 failures per window on average
-- Balances granularity vs. having enough samples per window
+**Pros**: Fine-grained temporal splitting
+**Cons**: Complex implementation, potential data leakage
 
-### Alternative Approaches:
+### Random Splitting (Not Recommended)
+```yaml
+dataset:
+  use_timeseries_split: false
+  use_stratification: false
+  test_size: 0.2
+```
 
-1. **Simple TimeSeriesSplitter** (if you want pure chronological split):
-   - Simpler, faster
-   - Risk: Test set may have different class distribution than train
+**Issue**: Shuffles time series data, unrealistic evaluation
 
-2. **StratifiedTimeSeriesSplitter with adaptive window**:
-   - Use `'5T'` for more granular stratification
-   - Use `'30T'` for coarser but more stable stratification
+## Validation Strategy
 
-## Final Answer
+### Cross-Run Validation
+- **Method**: Leave-one-run-out cross-validation
+- **Benefit**: Tests generalization across different operational scenarios
+- **Implementation**: Rotate which run is held out for testing
 
-**Your implementation is GOOD and APPROPRIATE for time-series classification with class imbalance.**
+### Performance Metrics
+- **Primary**: F1-score (handles imbalanced data)
+- **Secondary**: Precision, Recall, Accuracy
+- **Per-Class**: Individual metrics for Normal/Warning/Failure
 
-Minor adjustments:
-- Reduce window_size from '1H' to '10T' or '5T' 
-- Consider the temporal pattern of failures in your specific motor data
+## Configuration Examples
 
-The approach correctly balances:
-✅ Temporal ordering (no future leakage)
-✅ Class distribution (handles imbalance)
-✅ Realistic evaluation (tests on recent data)
+### Change Test Set Size
+```yaml
+dataset:
+  test_size: 0.3  # 30% of runs for testing
+```
 
+### Enable Stratification (Layer 2)
+```yaml
+dataset:
+  use_stratification: true  # Maintain class distribution in splits
+```
+
+### Custom Run Ordering
+```yaml
+# Control which runs go to train/test by file order
+failure_files:
+  - 'failure_1_bearing_fault.csv'      # Earlier = more likely train
+  - 'failure_2_shaft_misalignment.csv'
+  - 'failure_9_impeller_wear.csv'      # Later = more likely test
+```
+
+## Quality Assurance
+
+### Leakage Prevention Checks
+- **Run ID Overlap**: Verify no run_ids appear in both train/test
+- **Temporal Order**: Within runs, time order preserved
+- **Feature Consistency**: Same features available in train/test
+
+### Statistical Validation
+- **Class Distribution**: Compare train/test class ratios
+- **Time Range**: Ensure test set covers appropriate time periods
+- **Run Characteristics**: Similar run lengths and patterns
+
+## Performance Impact
+
+### Memory Efficiency
+- **Run-based**: Load complete runs into memory
+- **Time-based**: Process in streaming windows
+- **Current**: Run-based works well for your dataset size
+
+### Training Efficiency
+- **Balanced Classes**: XGBoost handles imbalanced data well
+- **Early Stopping**: Prevents overfitting on limited data
+- **Validation**: Test set represents realistic scenarios
+
+## Troubleshooting
+
+### Data Leakage Detection
+```python
+# Check for run_id overlap
+train_runs = set(train_df['run_id'].unique())
+test_runs = set(test_df['run_id'].unique())
+overlap = train_runs.intersection(test_runs)
+
+if overlap:
+    print(f"WARNING: Data leakage detected: {overlap}")
+```
+
+### Class Distribution Issues
+- **Problem**: Test set has different class distribution
+- **Solution**: Adjust `test_size` or file ordering
+- **Prevention**: Use stratified splitting for Layer 2
+
+### Temporal Distribution Issues
+- **Problem**: Test set only has recent failures
+- **Solution**: Randomize file order or use time-based splitting
+- **Prevention**: Ensure representative temporal coverage
+
+## Future Enhancements
+
+### Rolling Window Validation
+- **Purpose**: Simulate continuous learning scenario
+- **Method**: Expanding window training, rolling test periods
+- **Benefit**: More realistic production evaluation
+
+### Cross-Run Validation
+- **Implementation**: Automated leave-one-run-out CV
+- **Benefit**: Better generalization estimates
+- **Config**: `validation: {type: 'cross_run', folds: 5}`
+
+### Online Learning Simulation
+- **Purpose**: Test model updates with new data
+- **Method**: Incremental training on new runs
+- **Benefit**: Production deployment readiness
