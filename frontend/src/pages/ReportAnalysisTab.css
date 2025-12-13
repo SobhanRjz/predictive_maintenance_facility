@@ -1,0 +1,204 @@
+.report-analysis-tab {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 2rem 2rem;
+}
+
+.content-header {
+  margin-bottom: 2rem;
+}
+
+.top-status-panel {
+  background: linear-gradient(135deg, var(--bg-white) 0%, var(--bg-light) 100%);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  margin-bottom: 2.5rem;
+  border: 2px solid var(--primary-blue);
+  position: relative;
+}
+
+.top-status-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+}
+
+.status-header {
+  background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+  padding: 1.25rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status-header::before {
+  font-size: 1.5rem;
+}
+
+.status-title {
+  color: var(--bg-white);
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.status-content {
+  padding: 1.5rem;
+  background-color: var(--bg-white);
+}
+
+.status-content iframe {
+  border: none;
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.time-range-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: var(--bg-white);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+
+.time-range-selector button {
+  padding: 0.5rem 1rem;
+  background-color: var(--primary-blue);
+  color: var(--bg-white);
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.time-range-selector button:hover {
+  background-color: var(--primary-blue-dark);
+  transform: translateY(-1px);
+}
+
+.custom-range {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, var(--bg-light) 0%, var(--bg-white) 100%);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.custom-range input {
+  padding: 0.6rem 0.75rem;
+  border: 2px solid #ced4da;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  background-color: white;
+  min-width: 180px;
+}
+
+.custom-range input:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+}
+
+.custom-range span {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.custom-range button {
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.2);
+}
+
+.custom-range button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.section-description {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.grafana-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 1.5rem;
+}
+
+.grafana-panel-card {
+  background-color: var(--bg-white);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.grafana-panel-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.panel-header {
+  background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+  padding: 1rem 1.5rem;
+}
+
+.panel-title {
+  color: var(--bg-white);
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.panel-content {
+  padding: 1rem;
+  background-color: var(--bg-light);
+}
+
+.grafana-iframe {
+  width: 100%;
+  height: 350px;
+  border: none;
+  border-radius: var(--border-radius);
+  background-color: var(--bg-white);
+}
+
+@media (max-width: 1200px) {
+  .grafana-grid {
+    grid-template-columns: 1fr;
+  }
+}
