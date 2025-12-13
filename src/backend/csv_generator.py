@@ -16,7 +16,8 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.join(os.path.dirname(__file__)))))
 # Import ML components
-from src.ML.inference import MLInference
+from src.ML.inference.hierarchical_predictor import HierarchicalPredictor
+from src.ML.features.time_domain_features import TimeDomainFeatureExtractor
 
 
 class InfluxDBClientManager(IInfluxDBClient):
@@ -80,9 +81,13 @@ class DataConverter(IDataConverter):
             # Store as numeric field
             p = p.field("health_status_code", int(code))
 
+        # Handle fault_type tag
+        if "fault_type" in row.index and pd.notna(row["fault_type"]):
+            p = p.tag("fault_type", str(row["fault_type"]))
+
         # Add all other numeric fields
         for col in row.index:
-            if col in ("timestamp", "health_status"):
+            if col in ("timestamp", "health_status", "fault_type"):
                 continue
 
             value = row[col]
@@ -113,17 +118,28 @@ class DataStreamer(IDataStreamer):
 
         # Initialize ML inference
         try:
-            self.ml_inference = MLInference(logger=self.logger)
-            self.logger.info("ML inference initialized successfully")
+            self.feature_extractor = TimeDomainFeatureExtractor(
+                window_size="10min",
+                timestamp_col="timestamp",
+                target_col="health_status"
+            )
+            self.hierarchical_predictor = HierarchicalPredictor(
+                layer1_model_path="models/layer1_anomaly_detection.pkl",
+                layer2_warning_model_path="models/layer2_warning_classifier.pkl",
+                layer2_failure_model_path="models/layer2_failure_classifier.pkl"
+            )
+            self.logger.info("Hierarchical predictor initialized successfully")
         except Exception as e:
-            self.logger.error(f"Failed to initialize ML inference: {e}")
-            self.ml_inference = None
+            self.logger.error(f"Failed to initialize hierarchical predictor: {e}")
+            self.feature_extractor = None
+            self.hierarchical_predictor = None
 
     def stream(self, df: pd.DataFrame) -> None:
         """Stream dataframe to InfluxDB."""
         client = self.client_manager.create_client()
         write_api = client.write_api(write_options=WriteOptions(batch_size=1))
         status_str = "Normal"
+        fault_type_str = "none"
         try:
             while True:
                 batch_rows: List[pd.Series] = []
@@ -141,21 +157,27 @@ class DataStreamer(IDataStreamer):
                     else:
                         batch_rows.append(row.copy())
                         batch_indices.append(index)
-                        
 
-                    if not self._is_csv_status_enabled: 
-                        # Process batch when we have 10 rows
+
+                    if not self._is_csv_status_enabled:
+                        # Process batch when we have 5 rows
                         if len(batch_rows) == 5:
                             try:
-                                status_str = self._process_ml_batch(batch_rows, batch_indices)
+                                status_str, fault_type_str = self._process_ml_batch(batch_rows, batch_indices)
+
+                                # normalize fault_type for normal
+                                if status_str == "Normal":
+                                    fault_type_str = "none"
+
                                 batch_rows.clear()
                                 batch_indices.clear()
-                                row['health_status'] = status_str
                             except Exception as e:
                                 self.logger.error(f"Error processing ML batch: {e}")
-                        else:
-                            row['health_status'] = status_str
 
+
+                    # ALWAYS write these two columns for every row
+                    row["health_status"] = status_str
+                    row["fault_type"] = fault_type_str
 
                     # Write to InfluxDB
                     point, now = self.converter.row_to_point(row, self.csv_config.measurement_name)
@@ -167,6 +189,7 @@ class DataStreamer(IDataStreamer):
                     time.sleep(self.csv_config.sleep_seconds)
 
                 status_str = "Normal"
+                fault_type_str = "none"
 
                 if not self.csv_config.loop_forever:
                     self.logger.info("Finished streaming CSV once. Exiting.")
@@ -177,23 +200,32 @@ class DataStreamer(IDataStreamer):
         finally:
             self.client_manager.close()
 
-    def _process_ml_batch(self, rows: List[pd.Series], indices: List[int]) -> None:
-        """Process a batch of 10 rows through the ML model."""
-        if not self.ml_inference:
-            self.logger.warning("ML inference not available, skipping batch processing")
-            return
+    def _process_ml_batch(self, rows: List[pd.Series], indices: List[int]) -> Tuple[str, str]:
+        """Process a batch through hierarchical predictor."""
+        if not self.hierarchical_predictor or not self.feature_extractor:
+            self.logger.warning("Hierarchical predictor not available")
+            return "Normal", "none"
 
         try:
             # Create DataFrame from batch rows
             batch_df = pd.DataFrame(rows)
 
-            # Run ML predictions
-            predictions_df = self.ml_inference.predict_batch(batch_df)
-            status_str = predictions_df.iloc[0]['predicted_health_status']
-            return status_str
+            # Extract features
+            features_df = self.feature_extractor.extract(batch_df)
+
+            # Run hierarchical predictions
+            results_df = self.hierarchical_predictor.predict(features_df)
+
+            # Get first prediction result
+            result = results_df.iloc[0]
+            status_str = result['health_status']
+            fault_type = result.get('failure_type') or result.get('warning_type')
+
+            return status_str, fault_type
 
         except Exception as e:
             self.logger.error(f"Error processing ML batch: {e}")
+            return "Normal", "none"
 
 
 class CSVGeneratorOrchestrator:

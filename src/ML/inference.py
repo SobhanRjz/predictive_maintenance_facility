@@ -14,7 +14,7 @@ class MLInference:
 
     def __init__(
         self,
-        model_path: str = "models/xgboost_model.pkl",
+        model_path: str = "models/Layer1_anomaly_detection.pkl",
         window_size: str = "10min",
         timestamp_col: str = "timestamp",
         target_col: str = "health_status",
